@@ -69,10 +69,13 @@
  * BUILD_BASE_INIT places initial(or transferred) logical view in the
  * middle of the available buffer area.
  */
-#define SCROLL_SIZE        (SCROLL_X_WIDTH * SCROLL_Y_DIM)
+#define SCROLL_SIZE        (IMAGE_X_WIDTH * IMAGE_Y_DIM)
 #define SCREEN_SIZE        (SCROLL_SIZE * 4 + 1)
 #define BUILD_BUF_SIZE     (SCREEN_SIZE + 20000)
 #define BUILD_BASE_INIT    ((BUILD_BUF_SIZE - SCREEN_SIZE) / 2)
+
+#define STATUS_SIZE        (STATUS_X_WIDTH * STATUS_Y_DIM)
+#define PLANE_SIZE         (IMAGE_X_WIDTH * IMAGE_Y_DIM)
 
 /* Mode X and general VGA parameters */
 #define VID_MEM_SIZE        131072
@@ -553,6 +556,32 @@ void clear_screens() {
 }
 
 
+void fill_status_bar(char * string){
+      char buffer[STATUS_Y_DIM][STATUS_X_DIM];
+      int i, j;
+      char * addr;
+      int p_off;
+
+      text2graphics(string, buffer);
+
+      addr = img3 + (show_x >> 2) + (show_y * STATUS_X_WIDTH);
+      p_off = (3-(show_x&3));
+
+      for(i=0; i<STATUS_Y_DIM; i++){
+            for(j=0; j<STATUS_X_DIM; j++){
+                  addr[(p_off*SCROLL_SIZE) + (i*STATUS_X_WIDTH) + (j>>2) + (SCROLL_X_WIDTH*SCROLL_Y_DIM)] = buffer[i][j];
+                  p_off--;
+                  if(p_off < 0){
+                        p_off = 3;
+                  }
+            }
+            p_off = (3-(show_x&3));
+      }
+
+      return;
+}
+
+
 /*
  * The functions inside the preprocessor block below rely on functions
  * in maze.c to generate graphical images of the maze.    These functions
@@ -577,8 +606,28 @@ void clear_screens() {
  *     SIDE EFFECTS: draws into the build buffer
  */
 int draw_vert_line(int x) {
-    /* to be written... */
-    return 0;
+      unsigned char buf[SCROLL_Y_DIM];
+      unsigned char * addr;
+      int plane;
+      int i;
+
+      if(x < 0 || x > SCROLL_X_DIM){
+            return -1;
+      }
+
+      x += show_x;
+
+      plane = (3-(x&3));
+
+      (*vert_line_fn)(x, show_y, buf);
+
+      addr = img3 + (x >> 2) + (show_y * SCROLL_X_WIDTH);
+
+      for(i = 0; i < SCROLL_Y_DIM; i++){
+            addr[SCROLL_SIZE*plane + i*SCROLL_X_WIDTH] = buf[i];
+      }
+
+      return 0;
 }
 
 

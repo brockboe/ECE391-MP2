@@ -225,6 +225,7 @@ static game_condition_t game_loop() {
          * entered a new room, then showing the screen(and status bar,
          * once you have it working).
          */
+
         if (enter_room) {
             /* Reset the view window to(0,0). */
             game_info.map_x = game_info.map_y = 0;
@@ -307,6 +308,14 @@ static game_condition_t game_loop() {
                 break;
             case CMD_QUIT: return GAME_QUIT;
             default: break;
+        }
+
+        if(status_msg[0] != '\0'){
+             fill_status_bar(status_msg);
+        }
+
+        else{
+             fill_status_bar("General Messages here");
         }
 
         /* If player wins the game, their room becomes NULL. */
@@ -585,6 +594,7 @@ static void redraw_room() {
     for (i = 0; i < SCROLL_Y_DIM; i++) {
         (void)draw_horiz_line(i);
     }
+
 }
 
 

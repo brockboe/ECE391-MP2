@@ -34,9 +34,78 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
+
+#define STATUS_X_DIM    320
+#define CHAR_COLOR_BG   0
+#define CHAR_COLOR_FG   50
+#define MAX_CHAR        (STATUS_X_DIM/FONT_WIDTH)
+#define STATUS_Y_DIM    (FONT_HEIGHT+2)
+
 
 #include "text.h"
 
+/*    text2graphics
+ *
+ *    DESCRIPTION:      Takes a string as argument and creates a
+ *                      graphical buffer that can be written to
+ *                      video memory in the status bar. The buffer
+ *                      takes up the entire bar and the text is already
+ *                      centered.
+ *
+ *    INPUTS: string....A pointer to a string
+ *            buffer....A pointer to the graphics buffer to where
+ *                      the graphics data will be written to. The
+ *                      buffer must be the same dimensions as the
+ *                      status part of the screen
+ *
+ *    OUTPUTS:          NONE
+ *
+ *    SIDE EFFECTS:     Writes the graphics data to the buffer pointer
+ *                      given to the program as argument
+ */
+void text2graphics(char * string, char * buffer){
+      int i, j;               /*Variables used for indexing*/
+      int str_len = 0;        /*Length of the string*/
+      int left_offset;        /*To center the */
+      int string_x_dim_pixel; /*Pixel width of the string output*/
+      int string_y_dim_pixel; /*Pixel height of the string output*/
+
+      /*the bit mask allows us to check individual bits of a value*/
+      unsigned char bitmask[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+
+      /*fill the buffer with the background (BG) color*/
+      for(i=0; i<STATUS_Y_DIM; i++){
+            for(j=0; j<STATUS_X_DIM; j++){
+                  buffer[i*STATUS_X_DIM + j] = CHAR_COLOR_BG;
+            }
+      }
+
+      /*Calculate the length of the string*/
+      for(i=0; string[i] != 0; i++){
+            str_len++;
+      }
+
+      /*Calculate the pixel size of the string*/
+      string_x_dim_pixel = str_len * FONT_WIDTH;
+      string_y_dim_pixel = FONT_HEIGHT;
+
+      /*Calculate the offset from the left side of the screen where to put the string*/
+      left_offset = (STATUS_X_DIM/2) - (string_x_dim_pixel/2);
+
+      /*Iterate through and place bits in the correct place*/
+      /*i index is the y position in the pixels of the string*/
+      /*j index is the x position in the pixels of the string*/
+      for(i=0; i<string_y_dim_pixel; i++){
+            for(j=0; j<string_x_dim_pixel; j++){
+                  if((font_data[string[j>>3]][i] & bitmask[j&7]) != 0){
+                        buffer[(i+1)*STATUS_X_DIM + left_offset + j] = CHAR_COLOR_FG;
+                  }
+            }
+      }
+
+      return;
+}
 
 /*
  * These font data were read out of video memory during text mode and
