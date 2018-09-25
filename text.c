@@ -98,7 +98,7 @@ void text2graphics(char * string, char * buffer){
       /*j index is the x position in the pixels of the string*/
       for(i=0; i<string_y_dim_pixel; i++){
             for(j=0; j<string_x_dim_pixel; j++){
-                  if((font_data[string[j>>3]][i] & bitmask[j&7]) != 0){
+                  if((font_data[(int)string[j>>3]][i] & bitmask[j&7]) != 0){
                         buffer[(i+1)*STATUS_X_DIM + left_offset + j] = CHAR_COLOR_FG;
                   }
             }

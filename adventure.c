@@ -212,7 +212,7 @@ static game_condition_t game_loop() {
     if ((tick_time.tv_usec += TICK_USEC) > 1000000) {
         tick_time.tv_sec++;
         tick_time.tv_usec -= 1000000;
-    }
+ }
 
     /* The player has just entered the first room. */
     enter_room = 1;
@@ -274,13 +274,6 @@ static game_condition_t game_loop() {
         } while (time_is_after(&cur_time, &tick_time));
 
         /*
-         * Handle asynchronous events.  These events use real time rather
-         * than tick counts for timing, although the real time is rounded
-         * off to the nearest tick by definition.
-         */
-        /*(none right now...) */
-
-        /*
          * Handle synchronous events--in this case, only player commands.
          * Note that typed commands that move objects may cause the room
          * to be redrawn.
@@ -310,12 +303,30 @@ static game_condition_t game_loop() {
             default: break;
         }
 
+        /*
+         * Fill the status bar. first check if the status_msg is empty.
+         * Otherwise fill in the room name and typed command.
+         */
+
         if(status_msg[0] != '\0'){
              fill_status_bar(status_msg);
         }
 
         else{
-             fill_status_bar(game_info.where.room_name);
+             char * room_name = get_room_name(game_info.where);
+             char * command = (char *)&cmd;
+             char status[41];
+
+             memset(status, ' ', 40);
+
+             int len_room_name = strlen(room_name);
+             int cmd_len = strlen(command);
+
+             /*memcpy(void * destination, void * source, size_t n)*/
+             memcpy(status, room_name, (size_t)len_room_name);
+             memcpy((status+40-cmd_len), command, (size_t)cmd_len);
+
+             fill_status_bar(status);
         }
 
         /* If player wins the game, their room becomes NULL. */

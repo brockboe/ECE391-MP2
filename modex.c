@@ -575,13 +575,13 @@ void fill_status_bar(char * string){
       char plane_buffer[STATUS_X_WIDTH][STATUS_Y_DIM];
       int i;
 
-      text2graphics(string, buffer);
+      text2graphics((char *)string, (char *)buffer);
 
-      write_addr = mem_image + (target_img^0x4000);
-      text2graphics(string, buffer);
+      write_addr = (char *)(mem_image + (target_img^0x4000));
+      text2graphics((char *)string, (char *)buffer);
 
       for(i=0; i<4; i++){
-            get_status_plane(buffer, plane_buffer, i);
+            get_status_plane((char *)buffer, (char *)plane_buffer, i);
             SET_WRITE_MASK(1 << (8+i));
             memcpy(write_addr, plane_buffer, STATUS_SIZE);
       }

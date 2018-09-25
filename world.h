@@ -95,4 +95,6 @@ extern tc_action_t typed_cmd_wear(room_t** rptr, const char* arg);
 /* in adventure.c */
 extern void show_status(const char* s);
 
+char * get_room_name(room_t * room);
+
 #endif /* WORLD_H */

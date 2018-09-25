@@ -297,6 +297,10 @@ static const room_data_t room_data[N_ROOMS] = {
     { R_REM_LAB,   "Remote Sensing Lab",  "images/rsenselab.photo",   R_NONE,      R_REM_ICE,   R_NONE      }
 };
 
+char * get_room_name(room_t * room){
+      return (char *)room->name;
+}
+
 /*
  * This local structure is used to specify object information in a
  * reasonably manageable way.  The array entries in the database specify
@@ -1771,4 +1775,3 @@ tc_action_t typed_cmd_wear(room_t** rptr, const char* arg) {
     show_status("You look good in pink!");
     return TC_REDRAW_ROOM;
 }
-
