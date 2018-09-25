@@ -314,7 +314,8 @@ static game_condition_t game_loop() {
 
         else{
              char * room_name = get_room_name(game_info.where);
-             char * command = (char *)&cmd;
+             char * command = (char *)get_typed_command();
+             while(' ' == *command) { command++; }
              char status[41];
 
              memset(status, ' ', 40);
@@ -324,7 +325,8 @@ static game_condition_t game_loop() {
 
              /*memcpy(void * destination, void * source, size_t n)*/
              memcpy(status, room_name, (size_t)len_room_name);
-             memcpy((status+40-cmd_len), command, (size_t)cmd_len);
+             memcpy((status+40-cmd_len-1), command, (size_t)cmd_len);
+             status[39] = '_';
 
              fill_status_bar(status);
         }
