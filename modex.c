@@ -69,7 +69,7 @@
  * BUILD_BASE_INIT places initial(or transferred) logical view in the
  * middle of the available buffer area.
  */
-#define SCROLL_SIZE        (IMAGE_X_WIDTH * IMAGE_Y_DIM)
+#define SCROLL_SIZE        (SCROLL_X_WIDTH * SCROLL_Y_DIM)
 #define SCREEN_SIZE        (SCROLL_SIZE * 4 + 1)
 #define BUILD_BUF_SIZE     (SCREEN_SIZE + 20000)
 #define BUILD_BASE_INIT    ((BUILD_BUF_SIZE - SCREEN_SIZE) / 2)
@@ -91,9 +91,9 @@ static unsigned short mode_X_seq[NUM_SEQUENCER_REGS] = {
 };
 static unsigned short mode_X_CRTC[NUM_CRTC_REGS] = {
     0x5F00, 0x4F01, 0x5002, 0x8203, 0x5404, 0x8005, 0xBF06, 0x1F07,
-    0x0008, 0x4109, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
+    0x0008, 0x0109, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
     0x9C10, 0x8E11, 0x8F12, 0x2813, 0x0014, 0x9615, 0xB916, 0xE317,
-    0xFF18
+    0x6B18
 };
 static unsigned char mode_X_attr[NUM_ATTR_REGS * 2] = {
     0x00, 0x00, 0x01, 0x01, 0x02, 0x02, 0x03, 0x03,
@@ -144,6 +144,8 @@ static void fill_palette_text();
 static void write_font_data();
 static void set_text_mode_3(int clear_scr);
 static void copy_image(unsigned char* img, unsigned short scr_addr);
+
+void fill_status_bar(char * string);
 
 
 /*
@@ -527,15 +529,15 @@ void show_screen() {
     /* Draw to each plane in the video memory. */
     for (i = 0; i < 4; i++) {
         SET_WRITE_MASK(1 << (i + 8));
-        copy_image(addr + ((p_off - i + 4) & 3) * SCROLL_SIZE + (p_off < i), target_img);
+        copy_image(addr + ((p_off - i + 4) & 3) * SCROLL_SIZE + (p_off < i), target_img+(STATUS_SIZE));
     }
 
     /*
      * Change the VGA registers to point the top left of the screen
      * to the video memory that we just filled.
      */
-    OUTW(0x03D4, (target_img & 0xFF00) | 0x0C);
-    OUTW(0x03D4, ((target_img & 0x00FF) << 8) | 0x0D);
+    OUTW(0x03D4, ((target_img+STATUS_SIZE) & 0xFF00) | 0x0C);
+    OUTW(0x03D4, (((target_img+STATUS_SIZE) & 0x00FF) << 8) | 0x0D);
 }
 
 
@@ -555,27 +557,33 @@ void clear_screens() {
     memset(mem_image, 0, MODE_X_MEM_SIZE);
 }
 
+void get_status_plane(char * fullgraphics, char * plane, int poff){
+      int i, j;
+
+      for(i=0; i<STATUS_Y_DIM; i++){
+            for(j=0; j<STATUS_X_WIDTH; j++){
+                  plane[i*STATUS_X_WIDTH + j] = fullgraphics[i*STATUS_X_DIM + 4*j + poff];
+            }
+      }
+
+      return;
+}
 
 void fill_status_bar(char * string){
-      char buffer[STATUS_Y_DIM][STATUS_X_DIM];
-      int i, j;
-      char * addr;
-      int p_off;
+      char * write_addr;
+      unsigned char buffer[STATUS_X_DIM][STATUS_Y_DIM];
+      char plane_buffer[STATUS_X_WIDTH][STATUS_Y_DIM];
+      int i;
 
       text2graphics(string, buffer);
 
-      addr = img3 + (show_x >> 2) + (show_y * STATUS_X_WIDTH);
-      p_off = (3-(show_x&3));
+      write_addr = mem_image + (target_img^0x4000);
+      text2graphics(string, buffer);
 
-      for(i=0; i<STATUS_Y_DIM; i++){
-            for(j=0; j<STATUS_X_DIM; j++){
-                  addr[(p_off*SCROLL_SIZE) + (i*STATUS_X_WIDTH) + (j>>2) + (SCROLL_X_WIDTH*SCROLL_Y_DIM)] = buffer[i][j];
-                  p_off--;
-                  if(p_off < 0){
-                        p_off = 3;
-                  }
-            }
-            p_off = (3-(show_x&3));
+      for(i=0; i<4; i++){
+            get_status_plane(buffer, plane_buffer, i);
+            SET_WRITE_MASK(1 << (8+i));
+            memcpy(write_addr, plane_buffer, STATUS_SIZE);
       }
 
       return;

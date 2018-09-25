@@ -315,7 +315,7 @@ static game_condition_t game_loop() {
         }
 
         else{
-             fill_status_bar("General Messages here");
+             fill_status_bar(game_info.where.room_name);
         }
 
         /* If player wins the game, their room becomes NULL. */
