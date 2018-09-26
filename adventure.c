@@ -308,26 +308,45 @@ static game_condition_t game_loop() {
          * Otherwise fill in the room name and typed command.
          */
 
+         /*Check to see if there's a status message we should display*/
+
         if(status_msg[0] != '\0'){
+             /*first synchronize with the helper thread to ensure we have access to the status_msg*/
+             (void)pthread_mutex_lock(&msg_lock);
+
+             /*Display the status message*/
              fill_status_bar(status_msg);
+
+             /*Now that we no longer need access to the status_msg string, we can release our lock*/
+             (void)pthread_mutex_unlock(&msg_lock);             
         }
 
+
+        /*Otherwise print the room name + currently typed command*/
         else{
-             char * room_name = get_room_name(game_info.where);
-             char * command = (char *)get_typed_command();
+             char * room_name = get_room_name(game_info.where);   /*String containing room name*/
+             char * command = (char *)get_typed_command();        /*String containint typed command*/
+             char status[STATUS_X_DIM/FONT_WIDTH + 1];            /*String that holds what to write to status bar*/
+
+             /*Remove all the unecessary spaces from the typed command*/
              while(' ' == *command) { command++; }
-             char status[41];
 
-             memset(status, ' ', 40);
+             /*Fill the status with empty spaces - basically placeholders*/
+             memset(status, ' ', STATUS_X_DIM/FONT_WIDTH);
 
+             /*Calculate the length of the room name and typed command*/
              int len_room_name = strlen(room_name);
              int cmd_len = strlen(command);
 
              /*memcpy(void * destination, void * source, size_t n)*/
+             /*Place the room name on the left side of the status screen (beginning of status string)*/
              memcpy(status, room_name, (size_t)len_room_name);
-             memcpy((status+40-cmd_len-1), command, (size_t)cmd_len);
+             /*Place the typed command on the right side of the screen (end of status string), minus one space*/
+             memcpy((status+(STATUS_X_DIM/FONT_WIDTH)-cmd_len-1), command, (size_t)cmd_len);
+             /*Fill the last space with an underscore to prompt the user to type in commands*/
              status[39] = '_';
 
+             /*call fill_status_bar to print the status string into the status bar*/
              fill_status_bar(status);
         }
 

@@ -145,6 +145,7 @@ static void write_font_data();
 static void set_text_mode_3(int clear_scr);
 static void copy_image(unsigned char* img, unsigned short scr_addr);
 
+/*Function that writes the current status and information into the status bar*/
 void fill_status_bar(char * string);
 
 
@@ -535,7 +536,13 @@ void show_screen() {
     /*
      * Change the VGA registers to point the top left of the screen
      * to the video memory that we just filled.
+     *
+     * Note that the starting points need to have STATUS_SIZE added
+     * to them so the display area begins in the middle of the video
+     * memory, such that the VGA split screen implementation can work
+     * correctly.
      */
+
     OUTW(0x03D4, ((target_img+STATUS_SIZE) & 0xFF00) | 0x0C);
     OUTW(0x03D4, (((target_img+STATUS_SIZE) & 0x00FF) << 8) | 0x0D);
 }
@@ -557,11 +564,33 @@ void clear_screens() {
     memset(mem_image, 0, MODE_X_MEM_SIZE);
 }
 
+/*
+ * get_status_plane
+ * DESCRIPTION:   Takes the entire buffer, filled with the entire
+ *                status graphics image and chops it up into up to 4
+ *                distinct buffers, each corresponding to planes 0-4
+ *                so adding it to video memory is much easier
+ * INPUTS:        char * fullgraphics - a character array that contains
+ *                the entire graphics buffer, the one that is intended to be split up
+ *                char * plane - The destination to where the split up data is to
+ *                be fed into
+ *                int poff - Selects the desired plane that is to be grabbed from then
+ *                fullgraphics string
+ * OUTPUTS:       none
+ * SIDE EFFECTS:  none
+ */
 void get_status_plane(char * fullgraphics, char * plane, int poff){
       int i, j;
 
+      /* Iterate through the height and width of the plane buffer and write the
+       * appropriate data into it from the graphics string.
+       */
       for(i=0; i<STATUS_Y_DIM; i++){
             for(j=0; j<STATUS_X_WIDTH; j++){
+                  /*Go through the graphics buffer and copy only the bytes
+                   *relevant to the requested plane, by skipping every 3 bits
+                   *offset by the given plane offset.
+                   */
                   plane[i*STATUS_X_WIDTH + j] = fullgraphics[i*STATUS_X_DIM + 4*j + poff];
             }
       }
@@ -569,20 +598,36 @@ void get_status_plane(char * fullgraphics, char * plane, int poff){
       return;
 }
 
+/*
+ * fill_status_bar
+ * DESCRIPTION:   Takes a null-terminated character string, converts it into
+ *                a graphic format, and then loads that format into the video
+ *                memory at the appropriate spot as to show on the status bar
+ * INPUTS:        char * string - a pointer to a null-terminated string that is
+ *                to be printed on the status bar
+ * OUTPUTS:       none
+ * SIDE EFFECTS:  Loads a graphic of the string into video memory as to print
+ *                it to the screen.
+ */
 void fill_status_bar(char * string){
-      char * write_addr;
-      unsigned char buffer[STATUS_X_DIM][STATUS_Y_DIM];
-      char plane_buffer[STATUS_X_WIDTH][STATUS_Y_DIM];
-      int i;
+      char * write_addr;      /*The location in video memory where to write to*/
+      unsigned char buffer[STATUS_X_DIM][STATUS_Y_DIM];     /*The buffer containing the entire graphic*/
+      char plane_buffer[STATUS_X_WIDTH][STATUS_Y_DIM];      /*The buffer holding the data relevant to only one plane*/
+      int i;                  /*index variable, used for iterating through the planes*/
 
+      /*Convert the string into a graphics format and save it in buffer*/
       text2graphics((char *)string, (char *)buffer);
 
+      /*Calculate the write address - the beginning of the vid mem buffer that is yet to be shown on screen*/
       write_addr = (char *)(mem_image + (target_img^0x4000));
-      text2graphics((char *)string, (char *)buffer);
 
+      /*Iterate through the planes and write the data to video memory*/
       for(i=0; i<4; i++){
+            /*Grab the amount of data necessary for one plane*/
             get_status_plane((char *)buffer, (char *)plane_buffer, i);
+            /*Set the write mask to write to the appropriate plane*/
             SET_WRITE_MASK(1 << (8+i));
+            /*Now actually copy the graphics to that video memory location */
             memcpy(write_addr, plane_buffer, STATUS_SIZE);
       }
 
@@ -614,23 +659,29 @@ void fill_status_bar(char * string){
  *     SIDE EFFECTS: draws into the build buffer
  */
 int draw_vert_line(int x) {
-      unsigned char buf[SCROLL_Y_DIM];
-      unsigned char * addr;
-      int plane;
-      int i;
+      unsigned char buf[SCROLL_Y_DIM];    /*The buffer that holds the line to be written*/
+      unsigned char * addr;               /*The address where to write the line*/
+      int plane;  /*The plane in which the memory is written into*/
+      int i;      /*index, used for iterating through all bytes of the line*/
 
+      /*Ensure our x value is within the bounds of the screen*/
       if(x < 0 || x > SCROLL_X_DIM){
             return -1;
       }
 
+      /*Update x to be the logical address on the screen*/
       x += show_x;
 
+      /*Calculate which plane the line resides on*/
       plane = (3-(x&3));
 
+      /*Grab the line to be written from video memory*/
       (*vert_line_fn)(x, show_y, buf);
 
+      /*Calculate the address where to write the line*/
       addr = img3 + (x >> 2) + (show_y * SCROLL_X_WIDTH);
 
+      /*Iterate through the line bytes and load them into the appropriate plane of vid mem*/
       for(i = 0; i < SCROLL_Y_DIM; i++){
             addr[SCROLL_SIZE*plane + i*SCROLL_X_WIDTH] = buf[i];
       }

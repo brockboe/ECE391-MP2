@@ -52,15 +52,16 @@
  * X_WIDTH is a horizontal screen dimension in 'natural' units (addresses, characters of text, etc.)
  * Y_DIM   is a vertical screen dimension in pixels.
  */
+ 
 #define IMAGE_X_DIM     320   /* pixels; must be divisible by 4  */
 #define IMAGE_Y_DIM     200   /* pixels                          */
 #define IMAGE_X_WIDTH   (IMAGE_X_DIM / 4)   /* addresses (bytes) */
 #define SCROLL_X_DIM    IMAGE_X_DIM         /* full image width  */
-#define SCROLL_Y_DIM    182         /* full image width  */
+#define SCROLL_Y_DIM    182                 /* height of the image displayed on screen  */
 #define SCROLL_X_WIDTH  (IMAGE_X_DIM / 4)   /* addresses (bytes) */
-#define STATUS_Y_DIM    (IMAGE_Y_DIM - SCROLL_Y_DIM)
-#define STATUS_X_DIM    IMAGE_X_DIM
-#define STATUS_X_WIDTH  (STATUS_X_DIM / 4)
+#define STATUS_Y_DIM    (IMAGE_Y_DIM - SCROLL_Y_DIM)  /*Height of the status bar in pixels*/
+#define STATUS_X_DIM    IMAGE_X_DIM                   /*Width of the status bar in pixels*/
+#define STATUS_X_WIDTH  (STATUS_X_DIM / 4)            /*Width of the status bar in 4-byte chunks*/
 
 /*
  * NOTES

@@ -297,7 +297,17 @@ static const room_data_t room_data[N_ROOMS] = {
     { R_REM_LAB,   "Remote Sensing Lab",  "images/rsenselab.photo",   R_NONE,      R_REM_ICE,   R_NONE      }
 };
 
+
+/*
+ * get_room_name
+ * DESCRIPTION:   Given a room_t structer, it returns a pointer to the
+ *                string of the name of the room.
+ * INPUTS:        room_t * room - A pointer to a room whose name is desired
+ * OUTPUTS:       returns a pointer to the string of the room's name
+ * SIDE EFFECTS:  none
+ */
 char * get_room_name(room_t * room){
+      /*return a pointer to the room's name*/
       return (char *)room->name;
 }
 
