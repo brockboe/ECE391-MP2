@@ -29,7 +29,35 @@
 
 #define debug(str, ...) printk(KERN_DEBUG "%s: " str, __FUNCTION__, ## __VA_ARGS__)
 
+
 /************************ Protocol Implementation *************************/
+
+long button_status;
+long led_status;
+
+void handle_bioc_event(short b, short c);
+void set_leds(unsigned long arg, struct tty_struct *tty);
+
+short hex_to_display[16] = {
+      0xE7,       /*0*/
+      0x06,       /*1*/
+      0xCB,       /*2*/
+      0x8F,       /*3*/
+      0x2E,       /*4*/
+      0xAD,       /*5*/
+      0xED,       /*6*/
+      0x86,       /*7*/
+      0xEF,       /*8*/
+      0xAF,       /*9*/
+      0xEE,       /*A*/
+      0x6D,       /*b*/
+      0x49,       /*c*/
+      0x4F,       /*d*/
+      0xE9,       /*E*/
+      0xE7        /*F*/
+};
+
+#define DATA_MASK 0x0F
 
 /* tuxctl_handle_packet()
  * IMPORTANT : Read the header for tuxctl_ldisc_data_callback() in
@@ -43,6 +71,18 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
     b = packet[1]; /* values when printing them. */
     c = packet[2];
 
+      switch(a) {
+            case MTCP_BIOC_EVENT:
+                  handle_bioc_event((short)b, (short)c);
+                  return;
+            case MTCP_ACK:
+                  return;
+            case MTCP_RESET:
+                  return;
+            default:
+                  return;
+      }
+      return;
     /*printk("packet : %x %x %x\n", a, b, c); */
 }
 
@@ -64,9 +104,50 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
                  unsigned cmd, unsigned long arg) {
     switch (cmd) {
         case TUX_INIT:
+            button_status = 0;
+            led_status = 0;
+            return 0;
+
         case TUX_BUTTONS:
+            if((unsigned long *)arg == NULL){
+                  return -EINVAL;
+            }
+            *(unsigned long *)arg = button_status;
+            return 0;
+
         case TUX_SET_LED:
+            set_leds(arg, tty);
+            return 0;
+
         default:
             return -EINVAL;
     }
+}
+
+void handle_bioc_event(short b, short c){
+      int buttons_low = b & DATA_MASK;
+      int buttons_high = (c & DATA_MASK) << 4;
+      button_status = (long)(buttons_high | buttons_low);
+
+      return;
+}
+
+void set_leds(unsigned long arg, struct tty_struct *tty){
+      short display_write_mask = 0x0F;
+      short outbuf[6] = {MTCP_LED_SET, display_write_mask, 0, 0, 0, 0};
+      int data = arg & 0x0000FFFF;
+      short led_on = (arg & 0x000F0000) >> 16;
+      short dot_on = (arg & 0x0F000000) >> 24;
+      int i;
+
+      for(i = 0; i < 4; i ++){
+            if((led_on & (1 << i)) != 0){
+                  outbuf[2+i] = hex_to_display[(((data & (0xF << i*4))) >> i*4)];
+                  outbuf[2+i] |= ((dot_on & (1 << i)) << (4-i));
+            }
+      }
+
+      tuxctl_ldisc_put((struct tty_struct *)tty, (char const *)outbuf, 6);
+
+      return;
 }
