@@ -35,7 +35,9 @@
 long button_status;
 long led_status;
 
+void turn_bioc_on(struct tty_struct *tty);
 void handle_bioc_event(short b, short c);
+void handle_reset_request(struct tty_struct *tty);
 void set_leds(unsigned long arg, struct tty_struct *tty);
 
 short hex_to_display[16] = {
@@ -75,9 +77,8 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
             case MTCP_BIOC_EVENT:
                   handle_bioc_event((short)b, (short)c);
                   return;
-            case MTCP_ACK:
-                  return;
             case MTCP_RESET:
+                  handle_reset_request(tty);
                   return;
             default:
                   return;
@@ -106,6 +107,7 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
         case TUX_INIT:
             button_status = 0;
             led_status = 0;
+            turn_bioc_on(tty);
             return 0;
 
         case TUX_BUTTONS:
@@ -140,6 +142,8 @@ void set_leds(unsigned long arg, struct tty_struct *tty){
       short dot_on = (arg & 0x0F000000) >> 24;
       int i;
 
+      led_status = arg;
+
       for(i = 0; i < 4; i ++){
             if((led_on & (1 << i)) != 0){
                   outbuf[2+i] = hex_to_display[(((data & (0xF << i*4))) >> i*4)];
@@ -149,5 +153,18 @@ void set_leds(unsigned long arg, struct tty_struct *tty){
 
       tuxctl_ldisc_put((struct tty_struct *)tty, (char const *)outbuf, 6);
 
+      return;
+}
+
+void handle_reset_request(struct tty_struct *tty){
+      set_leds(led_status, tty);
+      button_status = 0;
+      turn_bioc_on(tty);
+      return;
+}
+
+void turn_bioc_on(struct tty_struct *tty){
+      char const outbuf = MTCP_BIOC_ON;
+      tuxctl_ldisc_put(tty, &outbuf, 1);
       return;
 }
