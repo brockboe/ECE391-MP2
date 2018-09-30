@@ -62,10 +62,10 @@
 #include "module/tuxctl-ioctl.h"
 
 /* set to 1 and compile this file by itself to test functionality */
-#define TEST_INPUT_DRIVER 0
+#define TEST_INPUT_DRIVER 1
 
 /* set to 1 to use tux controller; otherwise, uses keyboard input */
-#define USE_TUX_CONTROLLER 0
+#define USE_TUX_CONTROLLER 1
 
 #define TUX_BUTTON_RIGHT      0x80
 #define TUX_BUTTON_LEFT       0x40
@@ -296,6 +296,9 @@ cmd_t get_command() {
 #endif /* USE_TUX_CONTROLLER */
     }
 
+    if(pushed != CMD_TYPED){
+          pushed = get_tux_input();
+   }
     /*
      * Once a direction is pushed, that command remains active
      * until a turn is taken.
@@ -322,13 +325,14 @@ cmd_t get_command() {
  */
 void shutdown_input() {
       close(fd);
-    (void)tcsetattr(fileno(stdin), TCSANOW, &tio_orig);
+      (void)tcsetattr(fileno(stdin), TCSANOW, &tio_orig);
 }
 
 void tux_init(){
       if((fd=open("/dev/ttyS0", O_RDWR | O_NOCTTY))){
             printf("/dev/ttyS0 open message: %s\n", strerror(errno));
       }
+
       int ldisc_num = N_MOUSE;
 
       if(ioctl(fd, TIOCSETD, &ldisc_num)){
@@ -431,11 +435,10 @@ int main() {
        while ((cmd = get_command()) == last_cmd);
        last_cmd = cmd;
        printf("command issued: %s\n", cmd_name[cmd]);
-       cmd = get_command();
+       display_time_on_tux(83);
        if (cmd == CMD_QUIT)
             break;
       }
-      display_time_on_tux(83);
       shutdown_input();
       return 0;
 }

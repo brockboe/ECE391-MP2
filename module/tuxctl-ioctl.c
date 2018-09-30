@@ -33,10 +33,11 @@
 
 #define BYTE_LOWER 0x0F
 
-long button_status;
+unsigned long button_status;
 
 void reset_handler(struct tty_struct * tty);
 void init_handler(struct tty_struct * tty);
+void led_handler(struct tty_struct * tty, unsigned long arg);
 
 short hex_to_display[16] = {
       0xE7,       /*0*/
@@ -73,8 +74,10 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
 
       switch(a) {
             case MTCP_BIOC_EVENT:
-                  button_status = (long)(b & BYTE_LOWER);
+                  button_status = 0xFFFFFF00;
+                  button_status |= (long)(b & BYTE_LOWER);
                   button_status |= (long)((c & BYTE_LOWER) << 4);
+                  button_status = ~button_status;
                   return;
             case MTCP_RESET:
                   reset_handler(tty);
@@ -109,13 +112,14 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
             return 0;
 
         case TUX_BUTTONS:
-            if(arg == NULL){
+            if(arg == 0){
                   return -EINVAL;
             }
-            *arg = (unsigned long)button_status;
+            *(unsigned long *)arg = button_status;
             return 0;
 
         case TUX_SET_LED:
+            led_handler(tty, arg);
             return 0;
 
         default:
@@ -124,15 +128,21 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
 }
 
 void reset_handler(struct tty_struct * tty){
-      outbuf[2] = {MTCP_BIOC_ON, MTCP_LED_USR};
+      const char outbuf[2] = {MTCP_BIOC_ON, MTCP_LED_USR};
       tuxctl_ldisc_put(tty, outbuf, 2);
-      button_Status = 0;
+      button_status = 0;
       return;
 }
 
 void init_handler(struct tty_struct * tty){
-      outbuf[2] = {MTCP_BIOC_ON, MTCP_LED_USR};
+      const char outbuf[2] = {MTCP_BIOC_ON, MTCP_LED_USR};
       tuxctl_ldisc_put(tty, outbuf, 2);
       button_status = 0;
+      return;
+}
+
+void led_handler(struct tty_struct * tty, unsigned long arg){
+      const char outbuf[6] = {MTCP_LED_SET, 0x0F, 0x69, 0x49, 0x45, 0xE8};
+      tuxctl_ldisc_put(tty, outbuf, 6);
       return;
 }
