@@ -39,6 +39,7 @@ long led_debug = 0x0F0FABCD;
 void turn_bioc_on(struct tty_struct *tty);
 void turn_leds_on(struct tty_struct *tty);
 void turn_dbg_off(struct tty_struct * tty);
+void test_leds(struct tty_struct * tty);
 void handle_bioc_event(short b, short c);
 void handle_reset_request(struct tty_struct *tty);
 void set_leds(unsigned long arg, struct tty_struct *tty);
@@ -120,6 +121,7 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
             led_status = 0;
             turn_bioc_on(tty);
             turn_leds_on(tty);
+            test_leds(tty);
             return 0;
 
         case TUX_BUTTONS:
@@ -130,7 +132,7 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
             return 0;
 
         case TUX_SET_LED:
-            set_leds(arg, tty);
+            test_leds(tty);
             return 0;
 
         default:
@@ -147,7 +149,6 @@ void handle_bioc_event(short b, short c){
 }
 
 void set_leds(unsigned long arg, struct tty_struct *tty){
-      short display_write_mask = 0x0F;
       short led_on = (arg & 0x000F0000) >> 16;
       short dot_on = (arg & 0x0F000000) >> 24;
       short outbuf[6] = {MTCP_LED_SET, led_on, 0, 0, 0, 0};
@@ -176,7 +177,7 @@ void set_leds(unsigned long arg, struct tty_struct *tty){
 void handle_reset_request(struct tty_struct *tty){
       turn_dbg_off(tty);
       turn_leds_on(tty);
-      set_leds(led_debug, tty);
+      test_leds(tty);
       turn_bioc_on(tty);
       return;
 }
@@ -204,6 +205,15 @@ void turn_dbg_off(struct tty_struct *tty){
       printk("Turning dbg off\n");
       if(tuxctl_ldisc_put(tty, &outbuf, 1)){
             printk("turn_dbg_off failrure: Not all data was sent to device\n");
+      }
+      return;
+}
+
+void test_leds(struct tty_struct * tty){
+      const char outbuf[6] = {MTCP_LED_SET, 0x0F, 0x6D, 0xE9, 0xE9, 0xE8};
+      printk("Testing leds\n");
+      if(tuxctl_ldisc_put(tty, outbuf, 6)){
+            printk("Could not send all led test data!");
       }
       return;
 }

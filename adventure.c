@@ -279,8 +279,6 @@ static game_condition_t game_loop() {
          * to be redrawn.
          */
 
-         display_time_on_tux(tick_time.tv_sec);
-
         cmd = get_command();
         switch (cmd) {
             case CMD_UP:    move_photo_down();  break;
