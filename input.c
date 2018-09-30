@@ -54,19 +54,40 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <errno.h>
+
 #include "assert.h"
 #include "input.h"
 
+#include "module/tuxctl-ioctl.h"
+
 /* set to 1 and compile this file by itself to test functionality */
-#define TEST_INPUT_DRIVER 0
+#define TEST_INPUT_DRIVER 1
 
 /* set to 1 to use tux controller; otherwise, uses keyboard input */
-#define USE_TUX_CONTROLLER 0
+#define USE_TUX_CONTROLLER 1
+
+#define TUX_BUTTON_RIGHT      0x80
+#define TUX_BUTTON_LEFT       0x40
+#define TUX_BUTTON_DOWN       0x20
+#define TUX_BUTTON_UP         0x10
+#define TUX_BUTTON_C          0x08
+#define TUX_BUTTON_B          0x04
+#define TUX_BUTTON_A          0x02
+#define TUX_BUTTON_START      0x01
+
+#define BYTE_OFFSET_1 0
+#define BYTE_OFFSET_2 8
+#define BYTE_OFFSET_3 16
+#define BYTE_OFFSET_4 24
 
 
 /* stores original terminal settings */
 static struct termios tio_orig;
 
+int fd;
+void tux_init();
+cmd_t get_tux_input();
 
 /*
  * init_input
@@ -113,6 +134,9 @@ int init_input() {
         perror("tcsetattr to set stdin terminal settings");
         return -1;
     }
+
+    /*Initialize the tux controller*/
+    tux_init();
 
     /* Return success. */
     return 0;
@@ -262,6 +286,7 @@ cmd_t get_command() {
         }
 #else /* USE_TUX_CONTROLLER */
         /* Tux controller mode; still need to support typed commands. */
+
         if (valid_typing(ch)) {
             typed_a_char(ch);
         }
@@ -278,6 +303,12 @@ cmd_t get_command() {
     if (pushed == CMD_NONE) {
         command = CMD_NONE;
     }
+
+    command = get_tux_input();
+    if(command != CMD_NONE){
+          pushed = command;
+   }
+
     return pushed;
 }
 
@@ -291,9 +322,36 @@ cmd_t get_command() {
  *   SIDE EFFECTS: restores original terminal settings
  */
 void shutdown_input() {
+      close(fd);
     (void)tcsetattr(fileno(stdin), TCSANOW, &tio_orig);
 }
 
+void tux_init(){
+      if(fd = open("/dev/ttyS0", O_RDWR | O_NOCTTY)){
+            printf("/dev/ttyS0 open message: %s\n", strerror(errno));
+      }
+      int ldisc_num = N_MOUSE;
+
+      if(ioctl(fd, TIOCSETD, &ldisc_num)){
+            printf("IOCTL initialization failure: %s\n", strerror(errno));
+      }
+
+      printf("Calling first ioctl\n");
+      if(ioctl(fd, TUX_INIT, NULL)){
+            printf("TUX_INIT IOCTL failure: %s\n", strerror(errno));
+      }
+      return;
+}
+
+short hex_to_BCD(short number){
+      short tens_place;
+      short ones_place;
+
+      tens_place = number / 10;
+      ones_place = number % 10;
+
+      return (tens_place << 4) | (ones_place << BYTE_OFFSET_1);
+}
 
 /*
  * display_time_on_tux
@@ -305,11 +363,54 @@ void shutdown_input() {
  *   SIDE EFFECTS: changes state of controller's display
  */
 void display_time_on_tux(int num_seconds) {
-#if (USE_TUX_CONTROLLER != 0)
-#error "Tux controller code is not operational yet."
-#endif
+      unsigned long tux_data = 0;
+      short decimal_points_on;
+      short displays_on;
+      int minutes;
+      int seconds;
+
+      minutes = hex_to_BCD(num_seconds / 60);
+      seconds = hex_to_BCD(num_seconds % 60);
+      decimal_points_on = 0x2;
+      displays_on = 0x7;
+
+      if(minutes > 0x9){
+            displays_on = 0x0F;
+      }
+
+      tux_data |= (seconds << BYTE_OFFSET_1);
+      tux_data |= (minutes << BYTE_OFFSET_2);
+      tux_data |= (displays_on << BYTE_OFFSET_3);
+      tux_data |= (decimal_points_on << BYTE_OFFSET_4);
+
+      if(ioctl(fd, TUX_SET_LED, tux_data)){
+            printf("display_time_on_tux error: %d\n", errno);
+      }
+
+      ioctl(fd, TUX_SET_LED, tux_data);
+
+      return;
+
 }
 
+cmd_t get_tux_input(){
+      long  button_pressed;
+
+      ioctl(fd, TUX_BUTTONS, &button_pressed);
+
+      switch(button_pressed){
+            case TUX_BUTTON_UP:     return CMD_UP;
+            case TUX_BUTTON_DOWN:   return CMD_DOWN;
+            case TUX_BUTTON_LEFT:   return CMD_LEFT;
+            case TUX_BUTTON_RIGHT:  return CMD_RIGHT;
+            case TUX_BUTTON_A:      return CMD_MOVE_LEFT;
+            case TUX_BUTTON_B:      return CMD_ENTER;
+            case TUX_BUTTON_C:      return CMD_MOVE_RIGHT;
+            default:                return CMD_NONE;
+      }
+
+      return CMD_NONE;
+}
 
 #if (TEST_INPUT_DRIVER == 1)
 int main() {
@@ -328,13 +429,14 @@ int main() {
 
     init_input();
     while (1) {
-        while ((cmd = get_command()) == last_cmd);
-        last_cmd = cmd;
-        printf("command issued: %s\n", cmd_name[cmd]);
+//        while ((cmd = get_command()) == last_cmd);
+//        last_cmd = cmd;
+//        printf("command issued: %s\n", cmd_name[cmd]);
+        cmd = get_command();
         if (cmd == CMD_QUIT)
             break;
-        display_time_on_tux(83);
     }
+    display_time_on_tux(83);
     shutdown_input();
     return 0;
 }

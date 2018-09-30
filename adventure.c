@@ -279,6 +279,8 @@ static game_condition_t game_loop() {
          * to be redrawn.
          */
 
+         display_time_on_tux(tick_time.tv_sec);
+
         cmd = get_command();
         switch (cmd) {
             case CMD_UP:    move_photo_down();  break;
@@ -318,7 +320,7 @@ static game_condition_t game_loop() {
              fill_status_bar(status_msg);
 
              /*Now that we no longer need access to the status_msg string, we can release our lock*/
-             (void)pthread_mutex_unlock(&msg_lock);             
+             (void)pthread_mutex_unlock(&msg_lock);
         }
 
 

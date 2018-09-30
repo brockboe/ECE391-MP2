@@ -34,8 +34,11 @@
 
 long button_status;
 long led_status;
+long led_debug = 0x0F0FABCD;
 
 void turn_bioc_on(struct tty_struct *tty);
+void turn_leds_on(struct tty_struct *tty);
+void turn_dbg_off(struct tty_struct * tty);
 void handle_bioc_event(short b, short c);
 void handle_reset_request(struct tty_struct *tty);
 void set_leds(unsigned long arg, struct tty_struct *tty);
@@ -73,18 +76,25 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
     b = packet[1]; /* values when printing them. */
     c = packet[2];
 
+    printk("packet : %x %x %x\n", a, b, c);
+
+
       switch(a) {
             case MTCP_BIOC_EVENT:
+                  printk("BIOC event has occured\n");
                   handle_bioc_event((short)b, (short)c);
                   return;
             case MTCP_RESET:
+                  printk("We have received a reset request\n");
                   handle_reset_request(tty);
+                  return;
+            case MTCP_ACK:
+                  printk("We received an ACK\n");
                   return;
             default:
                   return;
       }
       return;
-    /*printk("packet : %x %x %x\n", a, b, c); */
 }
 
 /******** IMPORTANT NOTE: READ THIS BEFORE IMPLEMENTING THE IOCTLS ************
@@ -105,9 +115,11 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
                  unsigned cmd, unsigned long arg) {
     switch (cmd) {
         case TUX_INIT:
+            turn_dbg_off(tty);
             button_status = 0;
             led_status = 0;
             turn_bioc_on(tty);
+            turn_leds_on(tty);
             return 0;
 
         case TUX_BUTTONS:
@@ -136,35 +148,62 @@ void handle_bioc_event(short b, short c){
 
 void set_leds(unsigned long arg, struct tty_struct *tty){
       short display_write_mask = 0x0F;
-      short outbuf[6] = {MTCP_LED_SET, display_write_mask, 0, 0, 0, 0};
-      int data = arg & 0x0000FFFF;
       short led_on = (arg & 0x000F0000) >> 16;
       short dot_on = (arg & 0x0F000000) >> 24;
+      short outbuf[6] = {MTCP_LED_SET, led_on, 0, 0, 0, 0};
+      int data = arg & 0x0000FFFF;
       int i;
+
+      int bytes_to_send = 2;
 
       led_status = arg;
 
       for(i = 0; i < 4; i ++){
             if((led_on & (1 << i)) != 0){
-                  outbuf[2+i] = hex_to_display[(((data & (0xF << i*4))) >> i*4)];
-                  outbuf[2+i] |= ((dot_on & (1 << i)) << (4-i));
+                  outbuf[bytes_to_send] = hex_to_display[(((data & (0xF << i*4))) >> i*4)];
+                  outbuf[bytes_to_send] |= ((dot_on & (1 << i)) << (4-i));
+                  bytes_to_send++;
             }
       }
 
-      tuxctl_ldisc_put((struct tty_struct *)tty, (char const *)outbuf, 6);
+      if(tuxctl_ldisc_put((struct tty_struct *)tty, (char const *)outbuf, bytes_to_send)){
+            printk("set_leds: Not all data was sent to device\n");
+      }
 
       return;
 }
 
 void handle_reset_request(struct tty_struct *tty){
-      set_leds(led_status, tty);
-      button_status = 0;
+      turn_dbg_off(tty);
+      turn_leds_on(tty);
+      set_leds(led_debug, tty);
       turn_bioc_on(tty);
       return;
 }
 
 void turn_bioc_on(struct tty_struct *tty){
       char const outbuf = MTCP_BIOC_ON;
-      tuxctl_ldisc_put(tty, &outbuf, 1);
+      printk("turning bioc on\n");
+      if(tuxctl_ldisc_put(tty, &outbuf, 1)){
+            printk("turn_bioc_on failure: Not all data was sent to device\n");
+      }
+      return;
+}
+
+void turn_leds_on(struct tty_struct *tty){
+      char const outbuf = MTCP_LED_USR;
+      printk("turning leds on\n");
+      if(tuxctl_ldisc_put(tty, &outbuf, 1)){
+            printk("turn_leds_on failure: Not all data was sent to device\n");
+      }
+      return;
+}
+
+void turn_dbg_off(struct tty_struct *tty){
+      char const outbuf = MTCP_DBG_OFF;
+      printk("Turning dbg off\n");
+      if(tuxctl_ldisc_put(tty, &outbuf, 1)){
+            printk("turn_dbg_off failrure: Not all data was sent to device\n");
+      }
       return;
 }
