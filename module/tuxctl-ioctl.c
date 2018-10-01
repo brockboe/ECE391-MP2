@@ -32,6 +32,9 @@
 /************************ Protocol Implementation *************************/
 
 #define BYTE_LOWER 0x0F
+#define BYTE_UPPER 0xF0
+#define LED_DISPLAY_OFFSET 16
+#define LED_DOT_OFFSET 24
 
 unsigned long button_status;
 
@@ -55,7 +58,7 @@ short hex_to_display[16] = {
       0x49,       /*c - lowercase*/
       0x4F,       /*d - lowercase*/
       0xE9,       /*E - uppercase*/
-      0xE7        /*F - uppercase*/
+      0xE7,       /*F - uppercase*/
 };
 
 #define DATA_MASK 0x0F
@@ -142,7 +145,32 @@ void init_handler(struct tty_struct * tty){
 }
 
 void led_handler(struct tty_struct * tty, unsigned long arg){
-      const char outbuf[6] = {MTCP_LED_SET, 0x0F, 0x69, 0x49, 0x45, 0xE8};
-      tuxctl_ldisc_put(tty, outbuf, 6);
+      short data_to_print;
+      char decimal_points_on;
+      char led_displays_on;
+      char led[4];
+      int i;
+      char outbuf[6] = {MTCP_LED_SET, BYTE_LOWER, 0, 0, 0, 0};
+
+      data_to_print     = arg & LED_DISPLAY_MASK;
+      led_displays_on   = (arg & DISPLAY_ON_MASK) >> DISPLAY_ON_OFFSET;
+      decimal_points_on = (arg & DECIMAL_POINT_MASK) >> DECIMAL_POINT_OFFSET;
+
+      led[0] = hex_to_display[(data_to_print & LED_DISPLAY0_MASK) >> LED_DISPLAY0_OFFSET];
+      led[1] = hex_to_display[(data_to_print & LED_DISPLAY1_MASK) >> LED_DISPLAY1_OFFSET];
+      led[2] = hex_to_display[(data_to_print & LED_DISPLAY2_MASK) >> LED_DISPLAY2_OFFSET];
+      led[3] = hex_to_display[(data_to_print & LED_DISPLAY3_MASK) >> LED_DISPLAY3_OFFSET];
+
+      for(i = 0; i < 4; i++){
+            if(led_displays_on & (1<<i)){
+                  outbuf[i+2] = led[i];
+            }
+            if(decimal_points_on & (1<<i)){
+                  outbuf[i+2] |= DECIMAL_POINT_BIT;
+            }
+      }
+
+      tuxctl_ldisc_put(tty, (const char *)outbuf, 6);
+
       return;
 }

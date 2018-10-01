@@ -324,8 +324,8 @@ cmd_t get_command() {
  *   SIDE EFFECTS: restores original terminal settings
  */
 void shutdown_input() {
-      close(fd);
       (void)tcsetattr(fileno(stdin), TCSANOW, &tio_orig);
+      close(fd);
 }
 
 void tux_init(){
@@ -347,13 +347,13 @@ void tux_init(){
 }
 
 short hex_to_BCD(short number){
-      short tens_place;
-      short ones_place;
+      char tens_place;
+      char ones_place;
 
       tens_place = number / 10;
       ones_place = number % 10;
 
-      return (tens_place << 4) | (ones_place << BYTE_OFFSET_1);
+      return ((tens_place << 4) | (ones_place << BYTE_OFFSET_1));
 }
 
 /*
@@ -374,8 +374,12 @@ void display_time_on_tux(int num_seconds) {
 
       minutes = hex_to_BCD(num_seconds / 60);
       seconds = hex_to_BCD(num_seconds % 60);
-      decimal_points_on = 0x2;
-      displays_on = 0x7;
+      decimal_points_on = 0x4;
+      displays_on = 0x3;
+
+      if((num_seconds / 60) > 0){
+            displays_on = 0x07;
+      }
 
       if(minutes > 0x9){
             displays_on = 0x0F;
@@ -390,7 +394,7 @@ void display_time_on_tux(int num_seconds) {
             printf("display_time_on_tux error: %d\n", errno);
       }
 
-      ioctl(fd, TUX_SET_LED, tux_data);
+      printf("Sending display data: %x\n", (unsigned int)tux_data);
 
       return;
 
@@ -419,6 +423,8 @@ cmd_t get_tux_input(){
 int main() {
     cmd_t last_cmd = CMD_NONE;
     cmd_t cmd;
+    int count = 15;
+
     static const char* const cmd_name[NUM_COMMANDS] = {
         "none", "right", "left", "up", "down", "move left",
         "enter", "move right", "typed command", "quit"
@@ -435,7 +441,8 @@ int main() {
        while ((cmd = get_command()) == last_cmd);
        last_cmd = cmd;
        printf("command issued: %s\n", cmd_name[cmd]);
-       display_time_on_tux(83);
+       display_time_on_tux(count);
+       count += 5;
        if (cmd == CMD_QUIT)
             break;
       }
