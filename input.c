@@ -62,10 +62,10 @@
 #include "module/tuxctl-ioctl.h"
 
 /* set to 1 and compile this file by itself to test functionality */
-#define TEST_INPUT_DRIVER 1
+#define TEST_INPUT_DRIVER 0
 
 /* set to 1 to use tux controller; otherwise, uses keyboard input */
-#define USE_TUX_CONTROLLER 1
+#define USE_TUX_CONTROLLER 0
 
 #define TUX_BUTTON_RIGHT      0x80
 #define TUX_BUTTON_LEFT       0x40
@@ -85,7 +85,6 @@
 /* stores original terminal settings */
 static struct termios tio_orig;
 
-int fd;
 void tux_init();
 cmd_t get_tux_input();
 
@@ -296,9 +295,6 @@ cmd_t get_command() {
 #endif /* USE_TUX_CONTROLLER */
     }
 
-    if(pushed != CMD_TYPED){
-          pushed = get_tux_input();
-   }
     /*
      * Once a direction is pushed, that command remains active
      * until a turn is taken.
@@ -393,9 +389,6 @@ void display_time_on_tux(int num_seconds) {
       if(ioctl(fd, TUX_SET_LED, tux_data)){
             printf("display_time_on_tux error: %d\n", errno);
       }
-
-      printf("Sending display data: %x\n", (unsigned int)tux_data);
-
       return;
 
 }
@@ -423,7 +416,6 @@ cmd_t get_tux_input(){
 int main() {
     cmd_t last_cmd = CMD_NONE;
     cmd_t cmd;
-    int count = 15;
 
     static const char* const cmd_name[NUM_COMMANDS] = {
         "none", "right", "left", "up", "down", "move left",
@@ -438,11 +430,10 @@ int main() {
 
     init_input();
     while (1) {
-       while ((cmd = get_command()) == last_cmd);
+       while ((cmd = get_tux_input()) == last_cmd);
        last_cmd = cmd;
        printf("command issued: %s\n", cmd_name[cmd]);
-       display_time_on_tux(count);
-       count += 5;
+       display_time_on_tux(83);
        if (cmd == CMD_QUIT)
             break;
       }

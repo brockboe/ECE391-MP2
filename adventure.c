@@ -61,6 +61,7 @@
 static int sanity_check(void);
 #endif
 
+#define ADVENTURE_USE_TUX_CONTROLLER 1
 
 /* a few constants */
 #define TICK_USEC      50000 /* tick length in microseconds          */
@@ -170,6 +171,29 @@ static pthread_mutex_t msg_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  msg_cv = PTHREAD_COND_INITIALIZER;
 static char status_msg[STATUS_MSG_LEN + 1] = { '\0' };
 
+#if (ADVENTURE_USE_TUX_CONTROLLER == 1)
+
+static pthread_t tuxcontroller_thread_id;
+volatile int ready_for_tux = 0;
+cmd_t tux_command = CMD_NONE;
+
+static void cancel_tuxcontroller_thread(void * ignore){
+      close(fd);
+      (void)pthread_cancel(tuxcontroller_thread_id);
+      return;
+}
+
+static void * tuxcontroller_thread(void * ignore){
+      while(1){
+            while(!ready_for_tux);
+            tux_command = get_tux_input();
+            display_time_on_tux(clock() / CLOCKS_PER_SEC);
+            ready_for_tux = 0;
+      }
+      return NULL;
+}
+
+#endif
 
 /*
  * cancel_status_thread
@@ -184,7 +208,6 @@ static void cancel_status_thread(void* ignore) {
     (void)pthread_cancel(status_thread_id);
 }
 
-
 /*
  * game_loop
  *   DESCRIPTION: Main event loop for the adventure game.
@@ -194,6 +217,7 @@ static void cancel_status_thread(void* ignore) {
  *   SIDE EFFECTS: drives the display, etc.
  */
 static game_condition_t game_loop() {
+
     /*
      * Variables used to carry information between event loop ticks; see
      * initialization below for explanations of purpose.
@@ -204,6 +228,8 @@ static game_condition_t game_loop() {
     cmd_t cmd;               /* command issued by input control */
     int32_t enter_room;      /* player has changed rooms        */
 
+    cmd_t tux_input;
+
     /* Record the starting time--assume success. */
     (void)gettimeofday(&start_time, NULL);
 
@@ -212,13 +238,14 @@ static game_condition_t game_loop() {
     if ((tick_time.tv_usec += TICK_USEC) > 1000000) {
         tick_time.tv_sec++;
         tick_time.tv_usec -= 1000000;
- }
+    }
 
     /* The player has just entered the first room. */
     enter_room = 1;
 
     /* The main event loop. */
     while (1) {
+
         /*
          * Update the screen, preparing the VGA palette and photo-drawing
          * routines and drawing a new room photo first if the player has
@@ -245,6 +272,53 @@ static game_condition_t game_loop() {
         }
 
         show_screen();
+
+        /*
+         * Fill the status bar. first check if the status_msg is empty.
+         * Otherwise fill in the room name and typed command.
+         */
+
+         /*Check to see if there's a status message we should display*/
+
+        if(status_msg[0] != '\0'){
+             /*first synchronize with the helper thread to ensure we have access to the status_msg*/
+             (void)pthread_mutex_lock(&msg_lock);
+
+             /*Display the status message*/
+             fill_status_bar(status_msg);
+
+             /*Now that we no longer need access to the status_msg string, we can release our lock*/
+             (void)pthread_mutex_unlock(&msg_lock);
+        }
+
+
+        /*Otherwise print the room name + currently typed command*/
+        else{
+             char * room_name = get_room_name(game_info.where);   /*String containing room name*/
+             char * command = (char *)get_typed_command();        /*String containint typed command*/
+             char status[STATUS_X_DIM/FONT_WIDTH + 1];            /*String that holds what to write to status bar*/
+
+             /*Remove all the unecessary spaces from the typed command*/
+             while(' ' == *command) { command++; }
+
+             /*Fill the status with empty spaces - basically placeholders*/
+             memset(status, ' ', STATUS_X_DIM/FONT_WIDTH);
+
+             /*Calculate the length of the room name and typed command*/
+             int len_room_name = strlen(room_name);
+             int cmd_len = strlen(command);
+
+             /*memcpy(void * destination, void * source, size_t n)*/
+             /*Place the room name on the left side of the status screen (beginning of status string)*/
+             memcpy(status, room_name, (size_t)len_room_name);
+             /*Place the typed command on the right side of the screen (end of status string), minus one space*/
+             memcpy((status+(STATUS_X_DIM/FONT_WIDTH)-cmd_len-1), command, (size_t)cmd_len);
+             /*Fill the last space with an underscore to prompt the user to type in commands*/
+             status[39] = '_';
+
+             /*call fill_status_bar to print the status string into the status bar*/
+             fill_status_bar(status);
+        }
 
         /*
          * Wait for tick.  The tick defines the basic timing of our
@@ -303,52 +377,29 @@ static game_condition_t game_loop() {
             default: break;
         }
 
-        /*
-         * Fill the status bar. first check if the status_msg is empty.
-         * Otherwise fill in the room name and typed command.
-         */
+        ready_for_tux = 1;
 
-         /*Check to see if there's a status message we should display*/
-
-        if(status_msg[0] != '\0'){
-             /*first synchronize with the helper thread to ensure we have access to the status_msg*/
-             (void)pthread_mutex_lock(&msg_lock);
-
-             /*Display the status message*/
-             fill_status_bar(status_msg);
-
-             /*Now that we no longer need access to the status_msg string, we can release our lock*/
-             (void)pthread_mutex_unlock(&msg_lock);
-        }
-
-
-        /*Otherwise print the room name + currently typed command*/
-        else{
-             char * room_name = get_room_name(game_info.where);   /*String containing room name*/
-             char * command = (char *)get_typed_command();        /*String containint typed command*/
-             char status[STATUS_X_DIM/FONT_WIDTH + 1];            /*String that holds what to write to status bar*/
-
-             /*Remove all the unecessary spaces from the typed command*/
-             while(' ' == *command) { command++; }
-
-             /*Fill the status with empty spaces - basically placeholders*/
-             memset(status, ' ', STATUS_X_DIM/FONT_WIDTH);
-
-             /*Calculate the length of the room name and typed command*/
-             int len_room_name = strlen(room_name);
-             int cmd_len = strlen(command);
-
-             /*memcpy(void * destination, void * source, size_t n)*/
-             /*Place the room name on the left side of the status screen (beginning of status string)*/
-             memcpy(status, room_name, (size_t)len_room_name);
-             /*Place the typed command on the right side of the screen (end of status string), minus one space*/
-             memcpy((status+(STATUS_X_DIM/FONT_WIDTH)-cmd_len-1), command, (size_t)cmd_len);
-             /*Fill the last space with an underscore to prompt the user to type in commands*/
-             status[39] = '_';
-
-             /*call fill_status_bar to print the status string into the status bar*/
-             fill_status_bar(status);
-        }
+        switch(tux_command){
+             case CMD_UP:    move_photo_down();  break;
+             case CMD_RIGHT: move_photo_left();  break;
+             case CMD_DOWN:  move_photo_up();    break;
+             case CMD_LEFT:  move_photo_right(); break;
+             case CMD_MOVE_LEFT:
+                 enter_room = (TC_CHANGE_ROOM == try_to_move_left(&game_info.where));
+                 break;
+             case CMD_ENTER:
+                 enter_room = (TC_CHANGE_ROOM == try_to_enter(&game_info.where));
+                 break;
+             case CMD_MOVE_RIGHT:
+                 enter_room = (TC_CHANGE_ROOM == try_to_move_right(&game_info.where));
+                 break;
+             case CMD_TYPED:
+                 if (handle_typing()) {
+                     enter_room = 1;
+                 }
+                 break;
+            default: break;
+       }
 
         /* If player wins the game, their room becomes NULL. */
         if (NULL == game_info.where) {
@@ -772,7 +823,6 @@ int main() {
     }
     push_cleanup(cancel_status_thread, NULL);
 
-
     /* Start mode X. */
     if (0 != set_mode_X(fill_horiz_buffer, fill_vert_buffer)) {
         PANIC("cannot initialize mode X");
@@ -785,7 +835,18 @@ int main() {
     }
     push_cleanup((cleanup_fn_t)shutdown_input, NULL);
 
+    #if(ADVENTURE_USE_TUX_CONTROLLER == 1)
+    if(0!= pthread_create(&tuxcontroller_thread_id, NULL, tuxcontroller_thread, NULL)){
+          PANIC("Failed to create tuxcontroller thread");
+    }
+    push_cleanup(cancel_tuxcontroller_thread, NULL);
+    #endif
+
     game = game_loop();
+
+    #if(ADVENTURE_USE_TUX_CONTROLLER == 1)
+    pop_cleanup(1);
+    #endif
 
     pop_cleanup(1);
     pop_cleanup(1);

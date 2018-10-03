@@ -35,12 +35,15 @@
 #define BYTE_UPPER 0xF0
 #define LED_DISPLAY_OFFSET 16
 #define LED_DOT_OFFSET 24
+#define BIT_5_MASK 0x20
+#define BIT_6_MASK 0x40
 
 unsigned long button_status;
 
 void reset_handler(struct tty_struct * tty);
 void init_handler(struct tty_struct * tty);
 void led_handler(struct tty_struct * tty, unsigned long arg);
+void bioc_event_handler(struct tty_struct * tty, char a, char b);
 
 short hex_to_display[16] = {
       0xE7,       /*0*/
@@ -77,10 +80,7 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
 
       switch(a) {
             case MTCP_BIOC_EVENT:
-                  button_status = 0xFFFFFF00;
-                  button_status |= (long)(b & BYTE_LOWER);
-                  button_status |= (long)((c & BYTE_LOWER) << 4);
-                  button_status = ~button_status;
+                  bioc_event_handler(tty, b, c);
                   return;
             case MTCP_RESET:
                   reset_handler(tty);
@@ -128,6 +128,34 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
         default:
             return -EINVAL;
     }
+}
+
+void bioc_event_handler(struct tty_struct * tty, char b, char c){
+      char down_press;
+      char left_press;
+      button_status = 0xFFFFFF00;
+      button_status |= (long)(b & BYTE_LOWER);
+      button_status |= (long)((c & BYTE_LOWER) << 4);
+
+      /*button_status value at this point is R D L U C B A S*/
+      /*and we want R L D U C B A S, so we need to flip bits 5 and 6*/
+      button_status = ~button_status;
+
+      /*Grab the status of the left and down buttons*/
+      down_press = button_status & BIT_6_MASK;
+      left_press = button_status & BIT_5_MASK;
+
+      /*Now swap the values*/
+      button_status &= ~BIT_5_MASK;
+      button_status &= ~BIT_6_MASK;
+      if(down_press){
+            button_status |= BIT_5_MASK;
+      }
+      if(left_press){
+            button_status |= BIT_6_MASK;
+      }
+
+      return;
 }
 
 void reset_handler(struct tty_struct * tty){
