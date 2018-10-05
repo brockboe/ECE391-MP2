@@ -42,6 +42,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "assert.h"
 #include "input.h"
@@ -174,7 +175,7 @@ static char status_msg[STATUS_MSG_LEN + 1] = { '\0' };
 #if (ADVENTURE_USE_TUX_CONTROLLER == 1)
 
 static pthread_t tuxcontroller_thread_id;
-volatile int ready_for_tux = 0;
+static pthread_mutex_t tuxlock = PTHREAD_MUTEX_INITIALIZER;
 cmd_t tux_command = CMD_NONE;
 
 static void cancel_tuxcontroller_thread(void * ignore){
@@ -183,12 +184,51 @@ static void cancel_tuxcontroller_thread(void * ignore){
       return;
 }
 
+void write_to_buffer(cmd_t command){
+      pthread_mutex_lock(&tuxlock);
+      tux_command = command;
+      pthread_mutex_unlock(&tuxlock);
+      return;
+}
+
+cmd_t read_from_buffer(){
+      cmd_t buffer_contents;
+      pthread_mutex_lock(&tuxlock);
+      buffer_contents = tux_command;
+      tux_command = CMD_NONE;
+      pthread_mutex_unlock(&tuxlock);
+      return buffer_contents;
+}
+
+int empty_buffer(){
+      pthread_mutex_lock(&tuxlock);
+      if(tux_command == CMD_NONE){
+            pthread_mutex_unlock(&tuxlock);
+            return 1;
+      }
+      pthread_mutex_unlock(&tuxlock);
+      return 0;
+}
+
 static void * tuxcontroller_thread(void * ignore){
+      cmd_t local_cmd = CMD_NONE;
+      cmd_t last_cmd = CMD_NONE;
       while(1){
-            while(!ready_for_tux);
-            tux_command = get_tux_input();
+            usleep(50*1000);
+            local_cmd = get_tux_input();
             display_time_on_tux(clock() / CLOCKS_PER_SEC);
-            ready_for_tux = 0;
+
+            if((local_cmd == last_cmd) &&
+               ((last_cmd == CMD_MOVE_LEFT) ||
+                (last_cmd == CMD_ENTER) ||
+                (last_cmd == CMD_MOVE_RIGHT))){
+                     continue;
+               }
+
+            if(empty_buffer()){
+                  last_cmd = local_cmd;
+                  write_to_buffer(local_cmd);
+            }
       }
       return NULL;
 }
@@ -227,8 +267,6 @@ static game_condition_t game_loop() {
     struct timeval cur_time; /* current time(during tick)      */
     cmd_t cmd;               /* command issued by input control */
     int32_t enter_room;      /* player has changed rooms        */
-
-    cmd_t tux_input;
 
     /* Record the starting time--assume success. */
     (void)gettimeofday(&start_time, NULL);
@@ -377,9 +415,7 @@ static game_condition_t game_loop() {
             default: break;
         }
 
-        ready_for_tux = 1;
-
-        switch(tux_command){
+        switch(read_from_buffer()){
              case CMD_UP:    move_photo_down();  break;
              case CMD_RIGHT: move_photo_left();  break;
              case CMD_DOWN:  move_photo_up();    break;
@@ -392,11 +428,6 @@ static game_condition_t game_loop() {
                  break;
              case CMD_MOVE_RIGHT:
                  enter_room = (TC_CHANGE_ROOM == try_to_move_right(&game_info.where));
-                 break;
-             case CMD_TYPED:
-                 if (handle_typing()) {
-                     enter_room = 1;
-                 }
                  break;
             default: break;
        }
