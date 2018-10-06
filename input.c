@@ -67,6 +67,7 @@
 /* set to 1 to use tux controller; otherwise, uses keyboard input */
 #define USE_TUX_CONTROLLER 0
 
+/*Location of button statuses in the button status argument*/
 #define TUX_BUTTON_RIGHT      0x80
 #define TUX_BUTTON_LEFT       0x40
 #define TUX_BUTTON_DOWN       0x20
@@ -76,6 +77,7 @@
 #define TUX_BUTTON_A          0x02
 #define TUX_BUTTON_START      0x01
 
+/*Ofset of select bytes in an array*/
 #define BYTE_OFFSET_1 0
 #define BYTE_OFFSET_2 8
 #define BYTE_OFFSET_3 16
@@ -85,6 +87,7 @@
 /* stores original terminal settings */
 static struct termios tio_orig;
 
+/*See below for more details on these functions*/
 void tux_init();
 cmd_t get_tux_input();
 
@@ -321,20 +324,28 @@ cmd_t get_command() {
  */
 void shutdown_input() {
       (void)tcsetattr(fileno(stdin), TCSANOW, &tio_orig);
+      /*Close the tux controller line discipline*/
       close(fd);
 }
 
+/*
+ * tux_init()
+ * initializes the tux controller and checks for errors while doing so
+ */
 void tux_init(){
+      /*Open up the file descriptor to use for the line discipline*/
       if((fd=open("/dev/ttyS0", O_RDWR | O_NOCTTY))){
             printf("/dev/ttyS0 open message: %s\n", strerror(errno));
       }
 
       int ldisc_num = N_MOUSE;
 
+      /*Initialize the line discipline*/
       if(ioctl(fd, TIOCSETD, &ldisc_num)){
             printf("IOCTL initialization failure: %s\n", strerror(errno));
       }
 
+      /*Call the initialization ioctl*/
       printf("Calling first ioctl\n");
       if(ioctl(fd, TUX_INIT, NULL)){
             printf("TUX_INIT IOCTL failure: %s\n", strerror(errno));
@@ -342,6 +353,12 @@ void tux_init(){
       return;
 }
 
+/*
+ * hex_to_BCD(short number)
+ * DESCRIPTION:   takes a hexidecimal number as argument and returns the same number
+ *                in binary coded decimal. Used for writing to the tux controller
+ *                display
+ */
 short hex_to_BCD(short number){
       char tens_place;
       char ones_place;
@@ -349,6 +366,7 @@ short hex_to_BCD(short number){
       tens_place = number / 10;
       ones_place = number % 10;
 
+      /*Tens place goes in the high four bits and ones place goes into the low 4 bits*/
       return ((tens_place << 4) | (ones_place << BYTE_OFFSET_1));
 }
 
@@ -362,30 +380,36 @@ short hex_to_BCD(short number){
  *   SIDE EFFECTS: changes state of controller's display
  */
 void display_time_on_tux(int num_seconds) {
-      unsigned long tux_data = 0;
-      short decimal_points_on;
-      short displays_on;
+      unsigned long tux_data = 0;   /*Data to write to tux controller*/
+      short decimal_points_on;      /*Which decimal points should be turned on*/
+      short displays_on;            /*Which displays should be turned on*/
       int minutes;
       int seconds;
 
+      /*Convert the minutes and seconds to binary coded decimal*/
       minutes = hex_to_BCD(num_seconds / 60);
       seconds = hex_to_BCD(num_seconds % 60);
+      /*By default, have the third decimal point on and only two displays*/
       decimal_points_on = 0x4;
       displays_on = 0x3;
 
+      /*If the time is greater than one minute, turn on the third display*/
       if((num_seconds / 60) > 0){
             displays_on = 0x07;
       }
 
+      /*If the time is greater than ten minutes, turn on the fourth display*/
       if(minutes > 0x9){
             displays_on = 0x0F;
       }
 
+      /*Write the information to the argument*/
       tux_data |= (seconds << BYTE_OFFSET_1);
       tux_data |= (minutes << BYTE_OFFSET_2);
       tux_data |= (displays_on << BYTE_OFFSET_3);
       tux_data |= (decimal_points_on << BYTE_OFFSET_4);
 
+      /*Call the ioctl and display the time on the tux*/
       if(ioctl(fd, TUX_SET_LED, tux_data)){
             printf("display_time_on_tux error: %d\n", errno);
       }
@@ -393,9 +417,16 @@ void display_time_on_tux(int num_seconds) {
 
 }
 
-cmd_t get_tux_input(){
-      long  button_pressed;
+/*
+ * cmd_t get_tux_input()
+ * DESCRIPTION:   takes no arguments, and returns the current command being
+ *                issued by the tux controller
+ */
 
+cmd_t get_tux_input(){
+      long  button_pressed;   /*status of buttons being pressed on controller*/
+
+      /*Call the ioctl to read the button status*/
       ioctl(fd, TUX_BUTTONS, &button_pressed);
 
       switch(button_pressed){

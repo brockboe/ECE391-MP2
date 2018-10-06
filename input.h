@@ -64,13 +64,19 @@ extern void reset_typed_command();
 /* Shut down the input device. */
 extern void shutdown_input();
 
+/*File descriptor used for communicating with the tux*/
+int fd;
+
 /*
  * Show the elapsed seconds on the Tux controller(no effect when
  * compiled for a keyboard).
  */
-int fd;
 extern void display_time_on_tux(int num_seconds);
+
+/*Funciton reads the current state of the tux controller*/
 extern cmd_t get_tux_input();
+
+/*Initialize the tux controller*/
 extern void tux_init();
 
 #endif /* INPUT_H */

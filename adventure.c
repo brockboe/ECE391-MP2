@@ -174,16 +174,23 @@ static char status_msg[STATUS_MSG_LEN + 1] = { '\0' };
 
 #if (ADVENTURE_USE_TUX_CONTROLLER == 1)
 
+/*
+ * These variables are used for interacting with the tux controller and
+ * setting up the tux controller thread. tux_command acts as a buffer that
+ * holds the current command and is empty when ready to read a new command.
+ */
 static pthread_t tuxcontroller_thread_id;
 static pthread_mutex_t tuxlock = PTHREAD_MUTEX_INITIALIZER;
 cmd_t tux_command = CMD_NONE;
 
+/*closes the tuxcontoller thread on exit*/
 static void cancel_tuxcontroller_thread(void * ignore){
       close(fd);
       (void)pthread_cancel(tuxcontroller_thread_id);
       return;
 }
 
+/*Writes a command to the tux_command variable*/
 void write_to_buffer(cmd_t command){
       pthread_mutex_lock(&tuxlock);
       tux_command = command;
@@ -191,6 +198,9 @@ void write_to_buffer(cmd_t command){
       return;
 }
 
+/*Reads from the tux controller variable and clears it, signaling the
+ *program is ready for more input
+ */
 cmd_t read_from_buffer(){
       cmd_t buffer_contents;
       pthread_mutex_lock(&tuxlock);
@@ -200,6 +210,7 @@ cmd_t read_from_buffer(){
       return buffer_contents;
 }
 
+/*empty_buffer checks if the tux_command buffer is ready for another command*/
 int empty_buffer(){
       pthread_mutex_lock(&tuxlock);
       if(tux_command == CMD_NONE){
@@ -210,14 +221,24 @@ int empty_buffer(){
       return 0;
 }
 
+/*tuxcontroller_thread - handles adding and updating the command received
+ * from the tux controller
+ */
 static void * tuxcontroller_thread(void * ignore){
-      cmd_t local_cmd = CMD_NONE;
-      cmd_t last_cmd = CMD_NONE;
+      cmd_t local_cmd = CMD_NONE;   /*Last command issued*/
+      cmd_t last_cmd = CMD_NONE;    /*Current command, saved locally*/
       while(1){
+            /*Wait so the tux controller has time to prepare*/
             usleep(50*1000);
             local_cmd = get_tux_input();
+
+            /*Write the time to the tux controller*/
             display_time_on_tux(clock() / CLOCKS_PER_SEC);
 
+            /*Check to see if the last command was to move rooms
+             * and if that's the current command again, so we can avoid
+             * spamming the move rooms buttons and create an annoying problem
+             */
             if((local_cmd == last_cmd) &&
                ((last_cmd == CMD_MOVE_LEFT) ||
                 (last_cmd == CMD_ENTER) ||
@@ -225,6 +246,7 @@ static void * tuxcontroller_thread(void * ignore){
                      continue;
                }
 
+               /*Otherwise write the command if the buffer is empty*/
             if(empty_buffer()){
                   last_cmd = local_cmd;
                   write_to_buffer(local_cmd);
@@ -391,6 +413,7 @@ static game_condition_t game_loop() {
          * to be redrawn.
          */
 
+         /*Read the keyboard input and perform the appropriate action*/
         cmd = get_command();
         switch (cmd) {
             case CMD_UP:    move_photo_down();  break;
@@ -415,6 +438,7 @@ static game_condition_t game_loop() {
             default: break;
         }
 
+        /*Read the tux controller input and do the appropriate action*/
         switch(read_from_buffer()){
              case CMD_UP:    move_photo_down();  break;
              case CMD_RIGHT: move_photo_left();  break;
@@ -867,6 +891,7 @@ int main() {
     push_cleanup((cleanup_fn_t)shutdown_input, NULL);
 
     #if(ADVENTURE_USE_TUX_CONTROLLER == 1)
+    /*Setup the tux controller thread*/
     if(0!= pthread_create(&tuxcontroller_thread_id, NULL, tuxcontroller_thread, NULL)){
           PANIC("Failed to create tuxcontroller thread");
     }
