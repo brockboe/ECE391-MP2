@@ -62,7 +62,7 @@
 static int sanity_check(void);
 #endif
 
-#define ADVENTURE_USE_TUX_CONTROLLER 1
+#define ADVENTURE_USE_TUX_CONTROLLER 0
 
 /* a few constants */
 #define TICK_USEC      50000 /* tick length in microseconds          */
@@ -438,6 +438,8 @@ static game_condition_t game_loop() {
             default: break;
         }
 
+        #if(ADVENTURE_USE_TUX_CONTROLLER == 1)
+
         /*Read the tux controller input and do the appropriate action*/
         switch(read_from_buffer()){
              case CMD_UP:    move_photo_down();  break;
@@ -455,6 +457,8 @@ static game_condition_t game_loop() {
                  break;
             default: break;
        }
+
+       #endif
 
         /* If player wins the game, their room becomes NULL. */
         if (NULL == game_info.where) {
