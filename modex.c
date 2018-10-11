@@ -895,6 +895,10 @@ static void set_graphics_registers(unsigned short table[NUM_GRAPHICS_REGS]) {
     REP_OUTSW(0x03CE, table, NUM_GRAPHICS_REGS);
 }
 
+void set_palette(unsigned char * new_palette){
+      OUTB(0x03C8, 0x40);
+      REP_OUTSB(0x03C9, new_palette, 192*3);
+}
 
 /*
  * fill_palette_mode_x

@@ -52,6 +52,15 @@
 #define MAX_OBJECT_WIDTH   160
 #define MAX_OBJECT_HEIGHT  100
 
+/*constants referring to information on color pallettes*/
+#define RAW_RED_MASK 0xF800
+#define RAW_RED_OFFSET 11
+#define RAW_GREEN_MASK 0x07E0
+#define RAW_GREEN_OFFSET 5
+#define RAW_BLUE_MASK 0x001F
+#define RAW_BLUE_OFFSET 0
+
+
 
 /* Fill a buffer with the pixels for a horizontal line of current room. */
 extern void fill_horiz_buffer(int x, int y, unsigned char buf[SCROLL_X_DIM]);

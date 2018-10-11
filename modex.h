@@ -52,7 +52,7 @@
  * X_WIDTH is a horizontal screen dimension in 'natural' units (addresses, characters of text, etc.)
  * Y_DIM   is a vertical screen dimension in pixels.
  */
- 
+
 #define IMAGE_X_DIM     320   /* pixels; must be divisible by 4  */
 #define IMAGE_Y_DIM     200   /* pixels                          */
 #define IMAGE_X_WIDTH   (IMAGE_X_DIM / 4)   /* addresses (bytes) */
@@ -137,5 +137,7 @@ extern int draw_horiz_line(int y);
 
 /* draw a vertical line at horizontal pixel x within the logical view window */
 extern int draw_vert_line(int x);
+
+extern void set_palette(unsigned char * new_palette);
 
 #endif /* MODEX_H */

@@ -43,6 +43,7 @@
 #include "photo.h"
 #include "photo_headers.h"
 #include "world.h"
+#include "types.h"
 
 
 /* types local to this file(declared in types.h) */
@@ -86,6 +87,7 @@ struct image_t {
  */
 static const room_t* cur_room = NULL;
 
+void gen_color_pallette(uint16_t * raw_color_data, photo_t * p);
 
 /*
  * fill_horiz_buffer
@@ -300,6 +302,8 @@ uint32_t photo_width(const photo_t* p) {
 void prep_room(const room_t* r) {
     /* Record the current room. */
     cur_room = r;
+    photo_t * photo_struct = room_photo(r);
+    set_palette((unsigned char *)photo_struct->palette);
 }
 
 
@@ -423,6 +427,9 @@ photo_t* read_photo(const char* fname) {
         return NULL;
     }
 
+    /*Generate an array to store the raw color data*/
+    uint16_t * raw_color_data = malloc(sizeof(pixel) * p->hdr.height * p->hdr.width);
+
     /*
      * Loop over rows from bottom to top.  Note that the file is stored
      * in this order, whereas in memory we store the data in the reverse
@@ -443,6 +450,10 @@ photo_t* read_photo(const char* fname) {
                 (void)fclose(in);
                 return NULL;
             }
+
+            /*save the raw color data*/
+            raw_color_data[p->hdr.width * y + x] = pixel;
+
             /*
              * 16-bit pixel is coded as 5:6:5 RGB(5 bits red, 6 bits green,
              * and 6 bits blue).  We change to 2:2:2, which we've set for the
@@ -458,7 +469,116 @@ photo_t* read_photo(const char* fname) {
         }
     }
 
+    /*Generate the color pallette and free the raw color data*/
+    gen_color_pallette(raw_color_data, p);
+    free(raw_color_data);
+
     /* All done.  Return success. */
     (void)fclose(in);
     return p;
+}
+
+int inverse_cmp(const void * a, const void * b){
+      return (*(int *)b - *(int  *)a);
+}
+
+uint16_t level4_index(uint16_t color_data){
+      unsigned short R, G, B;
+      R = (color_data & 0xF000) >> 12;
+      G = (color_data & 0x0780) >> 7;
+      B = (color_data & 0x001E) >> 1;
+      return (uint16_t)((R << 8) | (G << 4) | B);
+}
+
+uint16_t level2_index(uint16_t color_data){
+      unsigned short R, G, B;
+      R = (color_data & 0xC000) >> 14;
+      G = (color_data & 0x0600) >> 9;
+      B = (color_data & 0x0018) >> 3;
+      return (uint16_t)((R << 4) | (G << 2) | B);
+}
+
+void gen_color_pallette(uint16_t * raw_color_data, photo_t * p){
+      long level2[64];
+      long level4[4096];
+      long level2average[64][3];
+      long level4average[4096][3];
+      int level4index;
+      int level2index;
+      int i, j;
+      long R, G, B;
+      long RMSB, GMSB, BMSB;
+      unsigned long level4count;
+      unsigned long level2count;
+
+      for(i = 0; i < 64; i++){
+            level2[i] = i;
+      }
+      for(i = 0; i < 4096; i++){
+            level4[i] = i;
+      }
+
+      for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
+            level4index = level4_index(raw_color_data[i]);
+            level4count = level4[level4index] >> 12;
+
+            R = ((raw_color_data[i] & RAW_RED_MASK) >> RAW_RED_OFFSET) << 1;
+            G = ((raw_color_data[i] & RAW_GREEN_MASK) >> RAW_GREEN_OFFSET) << 0;
+            B = ((raw_color_data[i] & RAW_BLUE_MASK) >> RAW_BLUE_OFFSET) << 1;
+
+            level4average[level4index][0] = ((level4average[level4index][0]*level4count) + R)/(level4count + 1);
+            level4average[level4index][1] = ((level4average[level4index][1]*level4count) + G)/(level4count + 1);
+            level4average[level4index][2] = ((level4average[level4index][2]*level4count) + B)/(level4count + 1);
+
+            level4count++;
+            level4[level4index] &= 0x00000FFF;
+            level4[level4index] |= (level4count << 12);
+      }
+
+      qsort(level4, 4096, sizeof(long), inverse_cmp);
+
+      for(i = 128; i < 4096; i++){
+            RMSB = (level4[i]&0x00000C00) >> 10;
+            GMSB = (level4[i]&0x000000C0) >> 6;
+            BMSB = (level4[i]&0x0000000C) >> 2;
+
+            level2index = (RMSB << 4) | (GMSB << 2) | BMSB;
+            level4index = level4[i] & 0x00000FFF;
+            level2count = level2[level2index] >> 6;
+
+            R = level4average[level4index][0];
+            G = level4average[level4index][1];
+            B = level4average[level4index][2];
+
+            level2average[level2index][0] = ((level2average[level2index][0]*level2count) + R)/(level2count + 1);
+            level2average[level2index][1] = ((level2average[level2index][1]*level2count) + G)/(level2count + 1);
+            level2average[level2index][2] = ((level2average[level2index][2]*level2count) + B)/(level2count + 1);
+
+            level2count++;
+            level2[level2index] &= 0x00000003F;
+            level2[level2index] |= level2count << 6;
+      }
+
+      for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
+            p->img[i] = 150;
+            for(j = 0; j < 128; j++){
+                  if(level4_index(raw_color_data[i]) == (level4[j] & 0x00000FFF)){
+                        p->img[i] = j+64;
+                  }
+            }
+      }
+
+      for(i = 0; i < 128; i++){
+            p->palette[i][0] = level4average[level4[i]&0x00000FFF][0];
+            p->palette[i][1] = level4average[level4[i]&0x00000FFF][1];
+            p->palette[i][2] = level4average[level4[i]&0x00000FFF][2];
+      }
+
+      for(i = 0; i < 64; i++){
+            p->palette[i + 128][0] = level2average[i][0];
+            p->palette[i + 128][1] = level2average[i][1];
+            p->palette[i + 128][2] = level2average[i][2];
+      }
+
+      return;
 }

@@ -738,7 +738,6 @@ photo_t* room_photo(const room_t* r) {
     return r->view;
 }
 
-
 /*
  * room_photo_height
  *   DESCRIPTION: Get height of room photo in pixels for a room.
