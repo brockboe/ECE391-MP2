@@ -41,6 +41,8 @@
 /*Global variable in which the status of the buttons is stored*/
 unsigned long button_status;
 
+int ready_for_led = 1;
+
 /*See the function descriptions beleow for more details*/
 void reset_handler(struct tty_struct * tty);
 void init_handler(struct tty_struct * tty);
@@ -90,6 +92,7 @@ void tuxctl_handle_packet (struct tty_struct* tty, unsigned char* packet) {
                   reset_handler(tty);
                   return;
             case MTCP_ACK:
+                  ready_for_led = 1;
                   return;
             default:
                   return;
@@ -130,7 +133,10 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
 
         case TUX_SET_LED:
             /*Call the led handler function*/
-            led_handler(tty, arg);
+            if(ready_for_led){
+                  ready_for_led = 0;
+                  led_handler(tty, arg);
+            }
             return 0;
 
         default:
@@ -141,7 +147,7 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
 /*
  * void bioc_event_handler(struct tty_struct * tty, char b, char c)
  * DESCRIPTION:   This is called whenever a BIOC event occurs, reads
- *                the values of the buttons and stores them in the 
+ *                the values of the buttons and stores them in the
  *                button_status global variable.
  * INPUTS:        tty - the location from where the line discipline
  *                gets the button input
@@ -196,8 +202,6 @@ void reset_handler(struct tty_struct * tty){
       const char outbuf[2] = {MTCP_BIOC_ON, MTCP_LED_USR};
       /*Write the commands to the tux controller*/
       tuxctl_ldisc_put(tty, outbuf, 2);
-      /*Reset the button status*/
-      button_status = 0;
       return;
 }
 

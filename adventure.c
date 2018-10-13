@@ -62,7 +62,7 @@
 static int sanity_check(void);
 #endif
 
-#define ADVENTURE_USE_TUX_CONTROLLER 0
+#define ADVENTURE_USE_TUX_CONTROLLER 1
 
 /* a few constants */
 #define TICK_USEC      50000 /* tick length in microseconds          */

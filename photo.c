@@ -501,15 +501,12 @@ uint16_t level2_index(uint16_t color_data){
 void gen_color_pallette(uint16_t * raw_color_data, photo_t * p){
       long level2[64];
       long level4[4096];
-      long level2average[64][3];
-      long level4average[4096][3];
-      int level4index;
-      int level2index;
+      unsigned long level2average[64][3];
+      unsigned long level4average[4096][3];
+      int level4index, level2index;
+      unsigned long level4count, level2count;
       int i, j;
       long R, G, B;
-      long RMSB, GMSB, BMSB;
-      unsigned long level4count;
-      unsigned long level2count;
 
       for(i = 0; i < 64; i++){
             level2[i] = i;
@@ -520,7 +517,9 @@ void gen_color_pallette(uint16_t * raw_color_data, photo_t * p){
 
       for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
             level4index = level4_index(raw_color_data[i]);
+            level2index = level2_index(raw_color_data[i]);
             level4count = level4[level4index] >> 12;
+            level2count = level2[level2index] >> 6;
 
             R = ((raw_color_data[i] & RAW_RED_MASK) >> RAW_RED_OFFSET) << 1;
             G = ((raw_color_data[i] & RAW_GREEN_MASK) >> RAW_GREEN_OFFSET) << 0;
@@ -530,40 +529,28 @@ void gen_color_pallette(uint16_t * raw_color_data, photo_t * p){
             level4average[level4index][1] = ((level4average[level4index][1]*level4count) + G)/(level4count + 1);
             level4average[level4index][2] = ((level4average[level4index][2]*level4count) + B)/(level4count + 1);
 
-            level4count++;
-            level4[level4index] &= 0x00000FFF;
-            level4[level4index] |= (level4count << 12);
-      }
-
-      qsort(level4, 4096, sizeof(long), inverse_cmp);
-
-      for(i = 128; i < 4096; i++){
-            RMSB = (level4[i]&0x00000C00) >> 10;
-            GMSB = (level4[i]&0x000000C0) >> 6;
-            BMSB = (level4[i]&0x0000000C) >> 2;
-
-            level2index = (RMSB << 4) | (GMSB << 2) | BMSB;
-            level4index = level4[i] & 0x00000FFF;
-            level2count = level2[level2index] >> 6;
-
-            R = level4average[level4index][0];
-            G = level4average[level4index][1];
-            B = level4average[level4index][2];
-
             level2average[level2index][0] = ((level2average[level2index][0]*level2count) + R)/(level2count + 1);
             level2average[level2index][1] = ((level2average[level2index][1]*level2count) + G)/(level2count + 1);
             level2average[level2index][2] = ((level2average[level2index][2]*level2count) + B)/(level2count + 1);
 
+            level4count++;
+            level4[level4index] &= 0x00000FFF;
+            level4[level4index] |= (level4count << 12);
+
             level2count++;
             level2[level2index] &= 0x00000003F;
-            level2[level2index] |= level2count << 6;
+            level2[level2index] |= (level2count << 6);
+
       }
 
+      qsort(level4, 4096, sizeof(long), inverse_cmp);
+
+
       for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
-            p->img[i] = 150;
+            p->img[i] = 64 + 128 + level2_index(raw_color_data[i]);
             for(j = 0; j < 128; j++){
                   if(level4_index(raw_color_data[i]) == (level4[j] & 0x00000FFF)){
-                        p->img[i] = j+64;
+                        p->img[i] = 64 + j;
                   }
             }
       }
