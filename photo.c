@@ -302,7 +302,9 @@ uint32_t photo_width(const photo_t* p) {
 void prep_room(const room_t* r) {
     /* Record the current room. */
     cur_room = r;
+    /*Get a pointer to the current room and use it to set the pallette*/
     photo_t * photo_struct = room_photo(r);
+    /*Write the palette data to video memory*/
     set_palette((unsigned char *)photo_struct->palette);
 }
 
@@ -471,6 +473,7 @@ photo_t* read_photo(const char* fname) {
 
     /*Generate the color pallette and free the raw color data*/
     gen_color_pallette(raw_color_data, p);
+    /*Free the raw color data array because we no longer need it*/
     free(raw_color_data);
 
     /* All done.  Return success. */
@@ -478,93 +481,158 @@ photo_t* read_photo(const char* fname) {
     return p;
 }
 
+/* inverse_cmp is a comparison function used by qsort
+ * later in the program.it returns -1 when a > b and 1 otherwise.
+ * It is inverted so that when the array is sorted, the largest
+ * elements occur first.
+ */
 int inverse_cmp(const void * a, const void * b){
       return (*(int *)b - *(int  *)a);
 }
 
+/*
+ * level4_index takes as argument a 5:6:5 RGB color argument andb
+ * returns a 4:4:4 RGB color index, which is used to index the level
+ * four octree. Only the most significant bytes are taken from the
+ * original "color_data"
+ */
 uint16_t level4_index(uint16_t color_data){
       unsigned short R, G, B;
+      /*Grab the four most significant bits*/
       R = (color_data & 0xF000) >> 12;
       G = (color_data & 0x0780) >> 7;
       B = (color_data & 0x001E) >> 1;
       return (uint16_t)((R << 8) | (G << 4) | B);
 }
 
+/*
+ * level2_index takes as argument a 5:6:5 RGB color argument andb
+ * returns a 2:2:2 RGB color index, which is used to index the level
+ * two octree. Only the most significant bytes are taken from the
+ * original "color_data"
+ */
 uint16_t level2_index(uint16_t color_data){
       unsigned short R, G, B;
+      /*Grab the two most significant bits*/
       R = (color_data & 0xC000) >> 14;
       G = (color_data & 0x0600) >> 9;
       B = (color_data & 0x0018) >> 3;
       return (uint16_t)((R << 4) | (G << 2) | B);
 }
 
+/*
+ * gen_color_pallette(uint16_t * raw_color_data, photo_t * p)
+ * DESCRIPTION:         takes the unedited information about a photo
+ *                      and creates a new palette for the image and
+ *                      saves the associated 256 color array in the
+ *                      p photo_t structure
+ * INPUTS:              raw_color_data - The unedited information
+ *                      from the photo containing the 5:6:5 RGB color values
+ * OUTPUTS:             none
+ * SIDE EFFECTS:        updates the palette and img fields in the photo
+ *                      to the correct values
+ */
 void gen_color_pallette(uint16_t * raw_color_data, photo_t * p){
-      long level2[64];
-      long level4[4096];
-      unsigned long level2average[64][3];
-      unsigned long level4average[4096][3];
-      int level4index, level2index;
-      unsigned long level4count, level2count;
-      int i, j;
-      long R, G, B;
+      long level2[LEVEL2_SIZE];                          /*count of entries in the level 2 octree*/
+      long level4[LEVEL4_SIZE];                        /*count of entries in the level 4 octree*/
+      unsigned long level2average[LEVEL2_SIZE][COLOR_COUNT];       /*Average values of the level 2 octree*/
+      unsigned long level4average[LEVEL4_SIZE][COLOR_COUNT];     /*Average values of the level 4 octree*/
+      int level4index, level2index;             /*Indices into the octrees*/
+      unsigned long level4count, level2count;   /*Number of elements at associated value of octree*/
+      int i, j;         /*Used for "for" loops*/
+      long R, G, B;     /*Hold the raw RGB values*/
 
-      for(i = 0; i < 64; i++){
+      /*
+       * The way sorting works for my implementation is relatively simple.
+       * the low bits represent either the associated 2:2:2 or 4:4:4 RGB
+       * values for a given level of octree. The high bits contain the number
+       * of occurences of these values in the original photo. This allows us
+       * to sort the list as intended while also keeping track of the associated
+       * RGB values
+       */
+
+       /*Fill the octrees with the associated RGB values */
+
+      for(i = 0; i < LEVEL2_SIZE; i++){
             level2[i] = i;
       }
-      for(i = 0; i < 4096; i++){
+      for(i = 0; i < LEVEL4_SIZE; i++){
             level4[i] = i;
       }
 
+      /*Count the number of occurences for each entry of the octree levels while also keeping a
+       *rolling average count of the RGB values
+       */
       for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
+            /*Grab the most significant bits so we can index into our octrees*/
             level4index = level4_index(raw_color_data[i]);
             level2index = level2_index(raw_color_data[i]);
-            level4count = level4[level4index] >> 12;
-            level2count = level2[level2index] >> 6;
+            /*Get the number of occurences at each entry of the octrees*/
+            level4count = level4[level4index] >> LEVEL4COUNT_OFFSET;
+            level2count = level2[level2index] >> LEVEL4COUNT_OFFSET;
 
+            /*Get the raw RGB values from the pixel grabbed from the image*/
             R = ((raw_color_data[i] & RAW_RED_MASK) >> RAW_RED_OFFSET) << 1;
             G = ((raw_color_data[i] & RAW_GREEN_MASK) >> RAW_GREEN_OFFSET) << 0;
             B = ((raw_color_data[i] & RAW_BLUE_MASK) >> RAW_BLUE_OFFSET) << 1;
 
-            level4average[level4index][0] = ((level4average[level4index][0]*level4count) + R)/(level4count + 1);
-            level4average[level4index][1] = ((level4average[level4index][1]*level4count) + G)/(level4count + 1);
-            level4average[level4index][2] = ((level4average[level4index][2]*level4count) + B)/(level4count + 1);
+            /*For simplicity, rolling averages are used to keep code straightforward.
+            * New Average = (old average * old count) + New entry / (old count + 1)
+            */
 
-            level2average[level2index][0] = ((level2average[level2index][0]*level2count) + R)/(level2count + 1);
-            level2average[level2index][1] = ((level2average[level2index][1]*level2count) + G)/(level2count + 1);
-            level2average[level2index][2] = ((level2average[level2index][2]*level2count) + B)/(level2count + 1);
+            /*Calculate and update the averages at level 4*/
+            level4average[level4index][RED] = ((level4average[level4index][RED]*level4count) + R)/(level4count + 1);
+            level4average[level4index][GRN] = ((level4average[level4index][GRN]*level4count) + G)/(level4count + 1);
+            level4average[level4index][BLU] = ((level4average[level4index][BLU]*level4count) + B)/(level4count + 1);
 
+            /*Calculate and update the averages at level 2*/
+            level2average[level2index][RED] = ((level2average[level2index][RED]*level2count) + R)/(level2count + 1);
+            level2average[level2index][GRN] = ((level2average[level2index][GRN]*level2count) + G)/(level2count + 1);
+            level2average[level2index][BLU] = ((level2average[level2index][BLU]*level2count) + B)/(level2count + 1);
+
+            /*Increment the counts upate the number of occurences in each list*/
             level4count++;
-            level4[level4index] &= 0x00000FFF;
-            level4[level4index] |= (level4count << 12);
+            level4[level4index] &= LOW_12_BITMASK;
+            level4[level4index] |= (level4count << LEVEL4COUNT_OFFSET);
 
             level2count++;
-            level2[level2index] &= 0x00000003F;
-            level2[level2index] |= (level2count << 6);
+            level2[level2index] &= LOW_6_BITMASK;
+            level2[level2index] |= (level2count << LEVEL2COUNT_OFFSET);
 
       }
 
-      qsort(level4, 4096, sizeof(long), inverse_cmp);
+      /*Sort the level 4 octree*/
+      qsort(level4, LEVEL4_SIZE, sizeof(long), inverse_cmp);
 
-
+      /*Write the 8-bit data mappings into the p->img[] array
+      * - Level four mappings are from 64 + 0 to 64 + 128
+      * - level two mappings are from 64 + 128 + 0 to 64 + 128 + 64
+      * The additional 64 is for the first 64 values in vga vidmem
+      * reserved for the status bar and objects
+      */
       for(i = 0; i < (p->hdr.height * p->hdr.width); i++){
-            p->img[i] = 64 + 128 + level2_index(raw_color_data[i]);
-            for(j = 0; j < 128; j++){
-                  if(level4_index(raw_color_data[i]) == (level4[j] & 0x00000FFF)){
-                        p->img[i] = 64 + j;
+            /*By default, write the associated level 2 entry into memory*/
+            p->img[i] = VIDMEM_PAL_OFFSET + LEVEL2_VIDMEM_OFFSET + level2_index(raw_color_data[i]);
+            /*If a level 4 entry for the pixel exists, overwrite that*/
+            for(j = 0; j < LEVEL4_COLORS_USED; j++){
+                  if(level4_index(raw_color_data[i]) == (level4[j] & LOW_12_BITMASK)){
+                        p->img[i] = VIDMEM_PAL_OFFSET + j;
                   }
             }
       }
 
+      /*Write the level 4 octree into the palette (level 4 goes from 0 to 127)*/
       for(i = 0; i < 128; i++){
-            p->palette[i][0] = level4average[level4[i]&0x00000FFF][0];
-            p->palette[i][1] = level4average[level4[i]&0x00000FFF][1];
-            p->palette[i][2] = level4average[level4[i]&0x00000FFF][2];
+            p->palette[i][RED] = level4average[level4[i]&LOW_12_BITMASK][RED];
+            p->palette[i][GRN] = level4average[level4[i]&LOW_12_BITMASK][GRN];
+            p->palette[i][BLU] = level4average[level4[i]&LOW_12_BITMASK][BLU];
       }
 
+      /*Write the level 2 octree into the palette (level 2 goes from 128 to 191)*/
       for(i = 0; i < 64; i++){
-            p->palette[i + 128][0] = level2average[i][0];
-            p->palette[i + 128][1] = level2average[i][1];
-            p->palette[i + 128][2] = level2average[i][2];
+            p->palette[i + LEVEL2_VIDMEM_OFFSET][RED] = level2average[i][RED];
+            p->palette[i + LEVEL2_VIDMEM_OFFSET][GRN] = level2average[i][GRN];
+            p->palette[i + LEVEL2_VIDMEM_OFFSET][BLU] = level2average[i][BLU];
       }
 
       return;

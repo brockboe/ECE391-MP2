@@ -60,7 +60,23 @@
 #define RAW_BLUE_MASK 0x001F
 #define RAW_BLUE_OFFSET 0
 
+#define RED 0
+#define GRN 1
+#define BLU 2
 
+#define LEVEL2_SIZE 64
+#define LEVEL4_SIZE 4096
+#define COLOR_COUNT 3
+
+#define LEVEL4COUNT_OFFSET 12
+#define LEVEL2COUNT_OFFSET 6
+
+#define LOW_12_BITMASK 0x00000FFF
+#define LOW_6_BITMASK 0x0000003F
+
+#define VIDMEM_PAL_OFFSET 64
+#define LEVEL2_VIDMEM_OFFSET 128
+#define LEVEL4_COLORS_USED 128
 
 /* Fill a buffer with the pixels for a horizontal line of current room. */
 extern void fill_horiz_buffer(int x, int y, unsigned char buf[SCROLL_X_DIM]);

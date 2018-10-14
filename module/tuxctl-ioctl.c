@@ -41,6 +41,7 @@
 /*Global variable in which the status of the buttons is stored*/
 unsigned long button_status;
 
+/*Variable used to prevent spamming*/
 int ready_for_led = 1;
 
 /*See the function descriptions beleow for more details*/
@@ -132,7 +133,7 @@ int tuxctl_ioctl(struct tty_struct* tty, struct file* file,
             return 0;
 
         case TUX_SET_LED:
-            /*Call the led handler function*/
+            /*ensure it's ready for information and then call the led handler function*/
             if(ready_for_led){
                   ready_for_led = 0;
                   led_handler(tty, arg);
